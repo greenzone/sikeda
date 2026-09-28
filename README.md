@@ -26,7 +26,7 @@
 deploy-vercel/
 ├── api/
 │   ├── index.js        ← SEMUA /api/*, /kta/*, /share-card/*, /qrcode/*
-│   ├── cetak.js        ← PDF kartu (fungsi besar: 3008 MB, 300 s)
+│   ├── cetak.js        ← PDF kartu (fungsi berat: 300 s)
 │   └── proxy.js        ← static fallback + /uploads (clean URL, 404)
 ├── app.js              ← Express app (dipakai kedua fungsi di atas)
 ├── src/                ← kode aplikasi (patch serverless di uploads-path/db/photo)
@@ -99,9 +99,10 @@ perbarui env `APP_URL` → redeploy.
    bertahan selama instance hidup, **hilang saat cold start baru**. Untuk
    produksi serius, sambungkan **Vercel Blob** (lihat `src/uploads-path.js`
    sebagai titik integrasi tunggal — semua tulisan upload lewat modul ini).
-2. **Cetak PDF** — jalan penuh via `api/cetak.js` (3008 MB / 300 dtk).
-   Plan **Hobby** dibatasi 60 dtk & 1024 MB — jika timeout, upgrade Pro
-   atau biarkan cetak dari paket Render/Hostinger.
+2. **Cetak PDF** — via `api/cetak.js`, `maxDuration` 300 dtk (sah untuk
+   Hobby & Pro dengan fluid compute; RAM mengikuti default plan —
+   Hobby 2 GB, tidak dapat dikonfigurasi). Kalau di Hobby tetap
+   timeout/OOM, cetak lewat paket Render/Hostinger atau upgrade Pro.
 3. **Koneksi MySQL** — setiap instance cold start membuka pool baru.
    Hostinger remote MySQL mendukung, tapi pantau `Max_connections`.
 4. **Warm-up** — request pertama tiap fungsi lambat (cold start). Normal.
