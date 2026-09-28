@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kebijakan Privasi — SIKEDA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/sikeda.css">
+<script>
+(function(){
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    var d = (j && j.ok && j.data) || {};
+    var st = document.createElement('style');
+    var p = d['site.theme_primary'], a = d['site.theme_accent'];
+    if(p || a){
+      st.textContent = ':root{'
+        + (p ? '--navy-700:' + p + ';--navy-800:' + p + ';--navy-900:' + p + ';--navy-600:' + p + ';' : '')
+        + (a ? '--gold-500:' + a + ';--gold-400:' + a + ';--gold-600:' + a + ';' : '')
+        + '}';
+    }
+    document.head.appendChild(st);
+  }).catch(function(){});
+})();
+</script>
+</head>
+<body>
+
+<!-- ===================== Header ===================== -->
+<header class="site-header">
+  <div class="appbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;" data-ck="site.header_brand_name">SIKEDA</span>
+        <span class="brand-sub" data-ck="site.header_brand_sub">DPD Nusantara Bersatu · Kab. Tulungagung</span>
+      </span>
+    </a>
+    <nav class="main-nav">
+      <a class="btn btn-soft btn-sm" href="index.html" style="display:inline-flex;align-items:center;gap:7px;">← Beranda</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== Konten ===================== -->
+<section class="section" style="padding-top:34px;">
+  <div class="container" style="max-width:760px;">
+
+    <a class="hp-back" href="index.html">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Kembali ke beranda
+    </a>
+
+    <div class="hp-hero">
+      <div class="hp-hero-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/></svg>
+        </div>
+      <div class="kicker" data-ck="site.help_privacy_title">Kebijakan Privasi</div>
+      <h1>Komitmen kami pada data Anda.</h1>
+      <p>Bagaimana SIKEDA mengumpulkan, melindungi, dan menggunakan data keanggotaan.</p>
+    </div>
+
+    <div id="helpProse" class="hp-prose"></div>
+
+    <div class="hp-cta">
+      <div>
+        <h4>Pertanyaan tentang privasi?</h4>
+        <p>Tim pengurus siap menjawab melalui kanal resmi.</p>
+      </div>
+      <a class="btn btn-gold" href="#" onclick="try{ if(window.opener && window.opener.openContactModal){ window.opener.openContactModal(); } else { location.href='index.html#footer'; } }catch(e){ location.href='index.html'; } return false;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Hubungi pengurus
+        </a>
+    </div>
+
+  </div>
+</section>
+
+<footer class="site-footer" style="margin-top:56px;">
+  <div class="container">
+    <div class="footer-bottom">
+      <span data-ck="site.footer_bottom">© 2026 DPD Nusantara Bersatu — Kab. Tulungagung</span>
+      <span data-ck="site.footer_secure">Data kependudukan disimpan terenkripsi sesuai ketentuan yang berlaku</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok || !j.data) return;
+    document.querySelectorAll('[data-ck]').forEach(function(el){
+      var v = j.data[el.getAttribute('data-ck')];
+      if(v) el.textContent = v;
+    });
+    var raw = j.data['site.help_privacy_body'] || '';
+    var target = document.getElementById('helpProse');
+    target.innerHTML = '';
+    raw.split('\n').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(para){
+      var p = document.createElement('p');
+      /* Kalimat pembuka tiap paragraf ditebalkan hingga tanda " — " atau ":" */
+      var mm = para.match(/^(.{4,60}?)\s*(—|:)\s*(.+)$/);
+      if(mm){
+        var strong = document.createElement('span'); strong.className = 'hp-em';
+        strong.textContent = mm[1] + ' ' + mm[2] + ' ';
+        p.appendChild(strong);
+        p.appendChild(document.createTextNode(mm[3]));
+      } else {
+        p.textContent = para;
+      }
+      target.appendChild(p);
+    });
+  }).catch(function(){});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dashboard — SIKEDA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/sikeda.css?v=pg11">
+<style>
+  /* Stat card */
+  .stat-card{padding:18px 20px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;}
+  .stat-card .sc-ic{position:absolute;right:14px;top:14px;width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+  .stat-delta{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:700;}
+  /* Chart bar */
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .bar-col .bar{width:100%;max-width:26px;border-radius:6px 6px 3px 3px;background:linear-gradient(180deg,var(--gold-400),var(--gold-600));min-height:6px;transition:height .6s cubic-bezier(.65,0,.35,1);}
+  .bar-col.dim .bar{background:var(--line);}
+  .bar-col .bar-lbl{font-size:.62rem;color:var(--ink-faint);font-weight:600;}
+  /* Progress kecamatan */
+  .dist-row{display:grid;grid-template-columns:110px 1fr 52px;gap:12px;align-items:center;padding:8px 0;font-size:.85rem;}
+  .dist-row .dist-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* Tabbar lebih tinggi di dashboard */
+  .dash-content.has-tabbar{padding-bottom:calc(96px + var(--safe-b));}
+</style>
+</head>
+<body>
+
+<div class="dash-layout" id="dashLayout">
+  <div class="sidebar-scrim" onclick="UI.closeSidebar()"></div>
+
+  <!-- ===================== Sidebar ===================== -->
+  <aside class="dash-sidebar no-print" id="dashSidebar">
+    <a class="brand" href="index.html" style="margin-bottom:8px;">
+      <span class="brand-mark"><span class="brand-org-full" style="display:none;"></span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;">SIKEDA</span>
+        <span class="brand-sub" id="sideOrgSub">Dashboard</span>
+      </span>
+    </a>
+    <nav id="sideNav" style="display:flex;flex-direction:column;gap:5px;"></nav>
+  </aside>
+
+  <!-- ===================== Main ===================== -->
+  <div class="dash-main">
+    <header class="dash-topbar no-print">
+      <button class="btn btn-ghost btn-icon menu-btn" aria-label="Buka menu" onclick="UI.openSidebar()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <div style="min-width:0;">
+        <div class="dash-title display-m" id="pageTitle">Dashboard</div>
+        <div class="tiny faint" id="pageSub"></div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+        <a class="btn btn-soft btn-sm" href="index.html" target="_blank" rel="noopener" title="Buka halaman depan website di tab baru" style="display:inline-flex;align-items:center;gap:7px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M3 12h18M12 3c2.7 2.7 4 5.7 4 9s-1.3 6.3-4 9c-2.7-2.7-4-5.7-4-9s1.3-6.3 4-9z" stroke="currentColor" stroke-width="1.7"/></svg>
+          <span class="lw-text">Lihat Website</span>
+        </a>
+        <span class="badge badge-dark" id="roleBadge" title="Level akses"></span>
+        <div id="bellWrap" style="position:relative;">
+          <button class="btn btn-ghost btn-icon" id="bellBtn" style="position:relative;display:none;" aria-label="Notifikasi" onclick="return UI.toggleBell(event);">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="bellDot" style="display:none;position:absolute;top:6px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;border:2px solid var(--paper);">0</span>
+          </button>
+          <div id="bellDrop" style="display:none;position:absolute;right:0;top:calc(100% + 8px);width:340px;max-width:calc(100vw - 32px);background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(9,14,22,.16);z-index:60;overflow:hidden;"></div>
+        </div>
+        <button class="btn btn-ghost btn-icon" aria-label="Keluar" title="Keluar" onclick="UI.logout()">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="avatar" id="topAvatar">—</div>
+      </div>
+    </header>
+    <div class="dash-content" id="dashContent"></div>
+  </div>
+</div>
+
+<!-- ===================== Tab bar (mobile) ===================== -->
+<nav class="tabbar no-print" id="tabbar" style="display:none;"></nav>
+
+<script src="assets/js/sikeda.js"></script>  <script src="assets/js/api.js"></script>
+  <script src="assets/js/xlsx-lite.js"></script>
+  <script src="assets/js/branding.js"></script>
+<link rel="stylesheet" href="assets/css/kta-card.css?v=pg11">
+<script src="assets/js/dashboard.js?v=pg11"></script>
+<script src="assets/js/dashboard-views.js?v=pg12"></script>
+</body>
+</html>

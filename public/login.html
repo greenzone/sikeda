@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Masuk — SIKEDA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/sikeda.css">
+<script>
+(function(){
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    var d = (j && j.ok && j.data) || {};
+    var st = document.createElement('style');
+    var p = d['site.theme_primary'], a = d['site.theme_accent'];
+    if(p || a){
+      st.textContent = ':root{'
+        + (p ? '--navy-700:' + p + ';--navy-800:' + p + ';--navy-900:' + p + ';--navy-600:' + p + ';' : '')
+        + (a ? '--gold-500:' + a + ';--gold-400:' + a + ';--gold-600:' + a + ';' : '')
+        + '}';
+    }
+    if(d['site.login_bg']){
+      st.textContent += '#loginSplit{background:linear-gradient(160deg,rgba(10,20,38,.9),rgba(10,20,38,.75)),url(/' + d['site.login_bg'] + ') center/cover !important;}';
+    }
+    document.head.appendChild(st);
+  }).catch(function(){});
+})();
+</script>
+</head>
+<body class="auth-body">
+
+<div class="auth-wrap" id="loginSplit">
+  <!-- Panel brand kiri (desktop) -->
+  <aside class="auth-brand" style="display:flex;">
+    <div>
+      <a class="brand" href="index.html" style="color:#fff;">
+        <span class="brand-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </span>
+        <span>
+          <span class="brand-name" style="display:block;" data-ck="site.header_brand_name">SIKEDA</span>
+          <span class="brand-sub" data-ck="site.header_brand_sub">DPD Nusantara Bersatu</span>
+        </span>
+      </a>
+      <div class="kicker on-dark" style="margin-top:42px;" data-ck="site.login_kicker">Portal keanggotaan resmi</div>
+      <h2 class="display-l" style="margin-top:12px;" data-ck="site.login_side_title">Masuk ke portal anggota.</h2>
+      <p style="margin-top:14px;color:rgba(238,242,248,.72);max-width:38ch;" data-ck="site.login_side_lead">
+        Verifikasi identitas dengan kode sekali pakai — aman tanpa perlu mengingat kata sandi.
+      </p>
+      <ul class="auth-points mt-24">
+        <li>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-ck="site.login_point1">Kode OTP aktif 5 menit, sekali pakai</span>
+        </li>
+        <li>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-ck="site.login_point2">Sesi terbatas &amp; log akses tercatat</span>
+        </li>
+        <li>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-ck="site.login_point3">Data NIK tersimpan terenkripsi</span>
+        </li>
+      </ul>
+      <div class="auth-note" data-ck="site.login_note">
+        Butuh bantuan masuk? Hubungi pengurus DPD Anda melalui WhatsApp resmi.
+      </div>
+    </div>
+  </aside>
+
+  <!-- Form -->
+  <div class="auth-panel">
+    <div class="auth-box">
+      <div class="auth-brand-sm">
+        <a class="brand" href="index.html">
+          <span class="brand-mark">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          </span>
+          <span><span class="brand-name" style="display:block;" data-ck="site.header_brand_name">SIKEDA</span><span class="brand-sub">Portal Anggota</span></span>
+        </a>
+      </div>
+
+      <div class="segment auth-tabs" id="authTabs" style="margin-bottom:18px;">
+        <button type="button" class="is-active" data-mode="anggota">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="7" r="3.4" stroke="currentColor" stroke-width="1.8"/><path d="M21 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span>Anggota</span>
+        </button>
+        <button type="button" data-mode="pengurus">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          <span>Pengurus</span>
+        </button>
+      </div>
+
+      <div id="stepRequest">
+        <h1 class="display-s">Masuk</h1>
+        <p class="muted small mt-8">Pilih channel untuk menerima kode verifikasi.</p>
+
+        <div class="segment" id="segChannel" style="margin-top:18px;">
+          <button type="button" class="is-active" data-ch="wa">WhatsApp</button>
+          <button type="button" data-ch="telegram">Telegram</button>
+          <button type="button" data-ch="email">Email</button>
+        </div>
+
+        <div class="field mt-16">
+          <label id="lblContact">Nomor WhatsApp</label>
+          <div class="input-shell"><input id="inContact" inputmode="tel" placeholder="08xx xxxx xxxx" autocomplete="tel"></div>
+        </div>
+        <div class="err" id="errReq" style="display:none;"></div>
+        <button class="btn btn-primary btn-block mt-16" id="btnReq">Kirim kode verifikasi</button>
+        <p class="tiny muted mt-16" style="text-align:center;">Belum jadi anggota? <a href="daftar.html" style="font-weight:600;">Daftar di sini</a></p>
+
+        <div class="demo-divider" aria-hidden="true"><span>atau</span></div>
+        <button class="btn btn-gold btn-block" id="btnDemo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 12.5H11L9.5 22L19.5 10H12.5L13 2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          Masuk Demo — tanpa OTP
+        </button>
+        <p class="tiny faint mt-8" style="text-align:center;">Akun demo anggota untuk simulasi &amp; koreksi desain.</p>
+        <div id="demoPicker" style="display:none;" class="mt-8">
+          <div class="field"><label>Pilih akun demo</label>
+            <select class="select" id="demoPick"></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="stepVerify" style="display:none;">
+        <h1 class="display-s">Masukkan kode</h1>
+        <p class="muted small mt-8" id="verifyHint">Kode 6 digit dikirim ke …</p>
+
+        <div class="otp-row" style="margin-top:20px;">
+          <input maxlength="1" inputmode="numeric" class="otp-cell" aria-label="digit 1">
+          <input maxlength="1" inputmode="numeric" class="otp-cell" aria-label="digit 2">
+          <input maxlength="1" inputmode="numeric" class="otp-cell" aria-label="digit 3">
+          <input maxlength="1" inputmode="numeric" class="otp-cell" aria-label="digit 4">
+          <input maxlength="1" inputmode="numeric" class="otp-cell" aria-label="digit 5">
+          <input maxlength="1" inputmode="numeric" class="otp-cell" aria-label="digit 6">
+        </div>
+        <div class="err" id="errVer" style="display:none;"></div>
+        <button class="btn btn-primary btn-block mt-16" id="btnVer">Verifikasi &amp; masuk</button>
+        <div class="row between mt-16 tiny" style="align-items:center;">
+          <button class="linklike" id="btnResend" disabled>Kirim ulang (60s)</button>
+          <button class="linklike" id="btnBack">Ganti nomor / email</button>
+        </div>
+      </div>
+
+      <div id="stepProfile" style="display:none;">
+        <h1 class="display-s">Lengkapi data dasar</h1>
+        <p class="muted small mt-8">Hanya untuk pendaftar baru yang belum memiliki profil.</p>
+        <div class="field mt-16"><label>Nama lengkap</label><div class="input-shell"><input id="inName" placeholder="Sesuai KTP"></div></div>
+        <div class="field"><label>Nama panggilan</label><div class="input-shell"><input id="inNick" placeholder="Nama sehari-hari"></div></div>
+        <div class="err" id="errProf" style="display:none;"></div>
+        <button class="btn btn-primary btn-block mt-16" id="btnProf">Simpan &amp; masuk</button>
+      </div>
+
+      <div id="stepAdmin" style="display:none;">
+        <h1 class="display-s">Masuk Pengurus</h1>
+        <p class="muted small mt-8">Untuk admin &amp; superadmin panel pengelolaan.</p>
+        <div class="field mt-16">
+          <label>Username</label>
+          <div class="input-shell"><input id="inUser" autocomplete="username" placeholder="username Anda"></div>
+        </div>
+        <div class="field mt-16">
+          <label>Password</label>
+          <div class="input-shell"><input id="inPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+        </div>
+        <div class="err" id="errAdm" style="display:none;"></div>
+        <button class="btn btn-primary btn-block mt-16" id="btnAdm">Masuk ke panel</button>
+        <p class="tiny muted mt-16" style="text-align:center;"><a href="lupa-password.html" style="font-weight:600;">Lupa kata sandi?</a></p>
+      </div>
+    </div>
+    <p class="tiny faint" style="text-align:center;margin-top:18px;" data-ck="site.login_footer">© 2026 DPD Nusantara Bersatu — Kab. Tulungagung</p>
+  </div>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script>
+/* Sudah login → langsung ke dashboard, tidak perlu lewat form lagi.
+   Realtime: bila sesi dibuat di tab lain saat halaman ini terbuka, ikut redirect. */
+(function(){
+  'use strict';
+  function go(){
+    if(window.SIKAPI && SIKAPI.sessionValid && SIKAPI.sessionValid()) location.replace('dashboard.html');
+  }
+  go();
+  window.addEventListener('storage', go);
+})();
+</script>
+<script>
+(function(){
+  'use strict';
+  /* Konten dinamis */
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok || !j.data) return;
+    document.querySelectorAll('[data-ck]').forEach(function(el){
+      var v = j.data[el.getAttribute('data-ck')];
+      if(v) el.textContent = v;
+    });
+  }).catch(function(){});
+
+  var channel = 'wa';
+  var contact = '';
+  var seg = document.getElementById('segChannel');
+  var lbl = document.getElementById('lblContact');
+  var inp = document.getElementById('inContact');
+
+  /* Tab Anggota / Pengurus */
+  var tabs = document.getElementById('authTabs');
+  tabs.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    tabs.querySelectorAll('button').forEach(function(x){ x.classList.remove('is-active'); });
+    b.classList.add('is-active');
+    var admin = b.getAttribute('data-mode') === 'pengurus';
+    ['stepRequest','stepVerify','stepProfile'].forEach(function(id){
+      document.getElementById(id).style.display = admin ? 'none' : (id === 'stepRequest' ? 'block' : 'none');
+    });
+    document.getElementById('stepAdmin').style.display = admin ? 'block' : 'none';
+    if(admin) document.getElementById('inUser').focus();
+  });
+
+  document.getElementById('btnAdm').addEventListener('click', function(){
+    hideErr('errAdm');
+    var u = (document.getElementById('inUser').value || '').trim();
+    var p = document.getElementById('inPass').value || '';
+    if(!u || !p) return showErr('errAdm', 'Lengkapi username & password.');
+    var btn = this; btn.disabled = true; btn.textContent = 'Memeriksa…';
+    SIKAPI.post('/auth/login', { username: u, password: p }).then(function(r){
+      btn.disabled = false; btn.textContent = 'Masuk ke panel';
+      if(!r.ok) return showErr('errAdm', r.error || 'Login gagal.');
+      if(r.token && r.user){
+        SIKAPI.setSession(r.token, r.user);
+        location.href = 'dashboard.html';
+      } else {
+        showErr('errAdm', 'Respons server tidak lengkap.');
+      }
+    }).catch(function(){ btn.disabled = false; btn.textContent = 'Masuk ke panel'; showErr('errAdm', 'Koneksi bermasalah, coba lagi.'); });
+  });
+
+  /* Masuk demo (tanpa OTP) — daftar akun dikelola Superadmin di Pengaturan.
+     Kosong / nonaktif → tombol & pemilih disembunyikan. */
+  var demoBtn = document.getElementById('btnDemo');
+  if(demoBtn){
+    var demoLabel = demoBtn.innerHTML;
+    var demoPick = document.getElementById('demoPick');
+    var demoPicker = document.getElementById('demoPicker');
+    SIKAPI.get('/auth/demo-list').then(function(r){
+      var accs = (r && r.accounts) || [];
+      if(!accs.length){
+        demoBtn.style.display = 'none';
+        var dv = document.querySelector('.demo-divider');
+        if(dv) dv.style.display = 'none';
+        var note = demoBtn.nextElementSibling;
+        if(note) note.style.display = 'none';
+        var pk = document.getElementById('demoPicker');
+        if(pk) pk.style.display = 'none';
+        return;
+      }
+      if(accs.length > 1 && demoPick){
+        demoPicker.style.display = '';
+        demoPick.innerHTML = accs.map(function(u){ return '<option value="' + u + '">' + u + '</option>'; }).join('');
+      }
+    }).catch(function(){ /* demo tetap tampil dengan akun utama */ });
+    demoBtn.addEventListener('click', function(){
+      demoBtn.disabled = true; demoBtn.textContent = 'Memproses…';
+      var body = {};
+      if(demoPick && demoPicker.style.display !== 'none' && demoPick.value) body.username = demoPick.value;
+      SIKAPI.post('/auth/demo', body).then(function(r){
+        demoBtn.disabled = false; demoBtn.innerHTML = demoLabel;
+        if(!r.ok){
+          if(/dinonaktifkan/i.test(String(r.error || ''))){
+            demoBtn.style.display = 'none';
+            var dv2 = document.querySelector('.demo-divider'); if(dv2) dv2.style.display = 'none';
+            var nt2 = demoBtn.nextElementSibling; if(nt2) nt2.style.display = 'none';
+            var pk2 = document.getElementById('demoPicker'); if(pk2) pk2.style.display = 'none';
+          }
+          showErr('errReq', r.error || 'Login demo gagal.'); return;
+        }
+        if(r.token && r.user){
+          SIKAPI.setSession(r.token, r.user);
+          location.href = 'dashboard.html';
+        } else {
+          showErr('errReq', 'Respons server tidak lengkap.');
+        }
+      }).catch(function(){
+        demoBtn.disabled = false; demoBtn.innerHTML = demoLabel;
+        showErr('errReq', 'Koneksi bermasalah, coba lagi.');
+      });
+    });
+  }
+
+  seg.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    seg.querySelectorAll('button').forEach(function(x){ x.classList.remove('is-active'); });
+    b.classList.add('is-active');
+    channel = b.getAttribute('data-ch');
+    lbl.textContent = channel === 'wa' ? 'Nomor WhatsApp' : channel === 'telegram' ? 'Username / Chat ID Telegram' : 'Alamat email';
+    inp.setAttribute('inputmode', channel === 'wa' ? 'tel' : channel === 'email' ? 'email' : 'text');
+    inp.setAttribute('placeholder', channel === 'wa' ? '08xx xxxx xxxx' : channel === 'telegram' ? '@username atau 123456789' : 'nama@email.com');
+  });
+
+  function showErr(id, msg){ var el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; }
+  function hideErr(id){ document.getElementById(id).style.display = 'none'; }
+
+  document.getElementById('btnReq').addEventListener('click', function(){
+    hideErr('errReq');
+    var v = (inp.value || '').trim();
+    if(channel === 'wa'){
+      v = v.replace(/[^0-9]/g, '');
+      if(v.startsWith('0')) v = '62' + v.slice(1);
+      if(v.length < 9) return showErr('errReq', 'Nomor WhatsApp tidak valid.');
+    } else if(channel === 'telegram'){
+      v = v.replace(/\s+/g, '');
+      if(/^\d+$/.test(v) && v.length < 5) return showErr('errReq', 'Chat ID Telegram minimal 5 digit.');
+      if(!/^\d+$/.test(v)){
+        if(!v.startsWith('@')) v = '@' + v;
+        if(!/^@[A-Za-z0-9_]{4,}$/.test(v)) return showErr('errReq', 'Username Telegram tidak valid (contoh: @budi).');
+      }
+    } else {
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return showErr('errReq', 'Alamat email tidak valid.');
+    }
+    contact = v;
+    var btn = this; btn.disabled = true; btn.textContent = 'Mengirim kode…';
+    SIKAPI.post('/auth/otp/request', { channel: channel, contact: contact }).then(function(r){
+      btn.disabled = false; btn.textContent = 'Kirim kode verifikasi';
+      if(!r.ok) return showErr('errReq', r.error || 'Gagal mengirim kode.');
+      document.getElementById('stepRequest').style.display = 'none';
+      document.getElementById('stepVerify').style.display = 'block';
+      document.getElementById('verifyHint').textContent = 'Kode 6 digit dikirim ke ' + contact + '.';
+      startResend();
+      var cells = document.querySelectorAll('.otp-cell');
+      if(cells[0]) cells[0].focus();
+    }).catch(function(){ btn.disabled = false; btn.textContent = 'Kirim kode verifikasi'; showErr('errReq', 'Koneksi bermasalah, coba lagi.'); });
+  });
+
+  /* OTP cells */
+  var cells = Array.prototype.slice.call(document.querySelectorAll('.otp-cell'));
+  cells.forEach(function(c, i){
+    c.addEventListener('input', function(){
+      c.value = c.value.replace(/[^0-9]/g, '').slice(0, 1);
+      if(c.value && cells[i + 1]) cells[i + 1].focus();
+      if(cells.every(function(x){ return x.value; })) verify();
+    });
+    c.addEventListener('keydown', function(e){
+      if(e.key === 'Backspace' && !c.value && cells[i - 1]) cells[i - 1].focus();
+    });
+    c.addEventListener('paste', function(e){
+      e.preventDefault();
+      var t = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+      t.split('').forEach(function(d, k){ if(cells[k]) cells[k].value = d; });
+      if(t.length === 6) verify();
+    });
+  });
+
+  function verify(){
+    hideErr('errVer');
+    var code = cells.map(function(c){ return c.value; }).join('');
+    if(code.length !== 6) return;
+    var btn = document.getElementById('btnVer'); btn.disabled = true; btn.textContent = 'Memeriksa…';
+    SIKAPI.post('/auth/otp/verify', { channel: channel, contact: contact, code: code }).then(function(r){
+      btn.disabled = false; btn.textContent = 'Verifikasi & masuk';
+      if(!r.ok) return showErr('errVer', r.error || 'Kode salah atau kedaluwarsa.');
+      if(r.token && r.user){
+        SIKAPI.setSession(r.token, r.user);
+        location.href = 'dashboard.html';
+      } else {
+        showErr('errVer', 'Respons server tidak lengkap.');
+      }
+    }).catch(function(){ btn.disabled = false; btn.textContent = 'Verifikasi & masuk'; showErr('errVer', 'Koneksi bermasalah, coba lagi.'); });
+  }
+  document.getElementById('btnVer').addEventListener('click', verify);
+
+  /* Resend timer */
+  var t = null;
+  function startResend(){
+    var b = document.getElementById('btnResend');
+    var s = 60;
+    b.disabled = true;
+    clearInterval(t);
+    t = setInterval(function(){
+      s--;
+      b.textContent = s > 0 ? ('Kirim ulang (' + s + 's)') : 'Kirim ulang kode';
+      if(s <= 0){ clearInterval(t); b.disabled = false; }
+    }, 1000);
+  }
+  document.getElementById('btnResend').addEventListener('click', function(){
+    if(this.disabled) return;
+    SIKAPI.post('/auth/otp/request', { channel: channel, contact: contact }).then(function(r){
+      if(r.ok) startResend();
+    }).catch(function(){});
+  });
+
+  document.getElementById('btnBack').addEventListener('click', function(){
+    clearInterval(t);
+    document.getElementById('stepVerify').style.display = 'none';
+    document.getElementById('stepRequest').style.display = 'block';
+    cells.forEach(function(c){ c.value = ''; });
+    hideErr('errVer');
+  });
+})();
+</script>
+</body>
+</html>

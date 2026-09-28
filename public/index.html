@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="SIKEDA — Sistem pendataan keanggotaan DPD Nusantara Bersatu: pendaftaran publik, verifikasi berjenjang, kartu anggota digital dengan QR.">
+<title>SIKEDA — Portal Keanggotaan · DPD Nusantara Bersatu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/sikeda.css?v=pg5">
+<script>
+/* Warna tema dari dashboard (sebelum render pertama — tanpa flash) */
+(function(){
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    var d = (j && j.ok && j.data) || {};
+    var st = document.createElement('style');
+    var p = d['site.theme_primary'], a = d['site.theme_accent'];
+    if(p || a){
+      st.textContent = ':root{'
+        + (p ? '--navy-700:' + p + ';--navy-800:' + p + ';--navy-900:' + p + ';--navy-600:' + p + ';' : '')
+        + (a ? '--gold-500:' + a + ';--gold-400:' + a + ';--gold-600:' + a + ';' : '')
+        + '}';
+    }
+    if(d['site.hero_bg']){
+      st.textContent += '.hero-dark{background:linear-gradient(rgba(8,17,32,.82),rgba(8,17,32,.82)),url(/' + d['site.hero_bg'] + ') center/cover;}';
+    }
+    document.head.appendChild(st);
+  }).catch(function(){});
+})();
+</script>
+</head>
+<body>
+
+<!-- ===================== Header ===================== -->
+<header class="site-header">
+  <div class="appbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;" data-ck="site.header_brand_name">SIKEDA</span>
+        <span class="brand-sub" data-ck="site.header_brand_sub">DPD Nusantara Bersatu · Kab. Tulungagung</span>
+      </span>
+    </a>
+    <nav class="main-nav">
+      <a href="#beranda" data-ck="site.header_nav1">Beranda</a>
+      <a href="#alur" data-ck="site.header_nav2">Alur</a>
+      <a href="#kartu" data-ck="site.header_nav3">Kartu Anggota</a>
+      <a href="#faq" data-ck="site.header_nav4">FAQ</a>
+      <a class="btn btn-check btn-sm" href="cek-anggota.html" style="display:inline-flex;align-items:center;gap:7px;padding:0 16px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="7" r="3.4" stroke="currentColor" stroke-width="1.8"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Cek Anggota</span>
+      </a>
+      <a class="btn btn-primary btn-sm" id="hdrLogin" href="login.html" style="display:inline-flex;align-items:center;gap:7px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span data-ck="site.header_cta">Masuk</span>
+      </a>
+    </nav>
+    <button class="nav-toggle" aria-label="Buka menu" onclick="sikedaToggleMenu(this)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="#131a24" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <nav class="mobile-nav">
+      <a href="#beranda" data-ck="site.header_nav1">Beranda</a>
+      <a href="#alur" data-ck="site.header_nav2">Alur Keanggotaan</a>
+      <a href="#kartu" data-ck="site.header_nav3">Kartu Anggota</a>
+      <a href="#faq" data-ck="site.header_nav4">FAQ</a>
+      <a href="daftar.html">Daftar Sekarang</a>
+      <a class="btn btn-check btn-sm" href="cek-anggota.html" style="display:inline-flex;align-items:center;gap:7px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="7" r="3.4" stroke="currentColor" stroke-width="1.8"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Cek Anggota</span>
+      </a>
+      <a id="hdrLoginM" href="login.html" style="color:var(--gold-600);" data-ck="site.header_cta">Masuk ke SIKEDA</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== Hero ===================== -->
+<section class="hero-dark" id="beranda">
+  <div class="container hero-grid">
+    <div>
+      <div class="kicker on-dark" data-ck="site.hero_kicker">Portal keanggotaan resmi</div>
+      <h1 class="display-hero" style="margin-top:16px;" data-ck="site.hero_title">Satu data anggota, terkelola rapi sampai kartu digital.</h1>
+      <p class="lead on-dark" style="margin-top:22px;max-width:52ch;color:rgba(238,242,248,.78);" data-ck="site.hero_lead">
+        Daftar lewat formulir publik, diverifikasi pengurus berjenjang, dan setiap anggota yang disetujui
+        langsung menerima kartu digital ber-QR yang bisa diverifikasi kapan saja.
+      </p>
+      <div class="row gap-12 wrap-flex" style="margin-top:32px;">
+        <a class="btn btn-gold btn-lg" href="daftar.html">
+          <span data-ck="site.hero_btn1">Daftar Jadi Anggota</span>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-6-6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="btn btn-outline-light btn-lg" href="login.html" data-ck="site.hero_btn2">Sudah punya akun? Masuk</a>
+      </div>
+      <div class="hero-proof mt-24" id="heroProof">
+        <span class="hero-proof-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5.1 3.4 9.7 8 11 4.6-1.3 8-5.9 8-11V5l-8-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-ck="site.hero_badge1">NIK disimpan terenkripsi</span>
+        </span>
+        <span class="hero-proof-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5.1 3.4 9.7 8 11 4.6-1.3 8-5.9 8-11V5l-8-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-ck="site.hero_badge2">Sesi login terlindungi</span>
+        </span>
+        <span class="hero-proof-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5.1 3.4 9.7 8 11 4.6-1.3 8-5.9 8-11V5l-8-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-ck="site.hero_badge3">Audit log penuh</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Kartu anggota preview -->
+    <div style="position:relative;">
+      <div class="vc-card" style="max-width:400px;margin:0 auto;transform:rotate(1.5deg);">
+        <div class="vc-head">
+          <div class="row between">
+            <span class="badge badge-gold" style="background:rgba(234,192,106,.16);color:var(--gold-400);">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.9 6.6.5-5 4.2 1.5 6.4L12 15.5 6.5 19l1.5-6.4-5-4.2 6.6-.5L12 2z" fill="currentColor"/></svg>
+              KARTU ANGGOTA
+            </span>
+            <span class="vc-id">GLKR-TA-2026-000018</span>
+          </div>
+          <div class="row gap-16 mt-24" style="position:relative;">
+            <div class="avatar xl gold" style="font-size:1.7rem;">AF</div>
+            <div>
+              <div class="display-m" style="font-size:1.5rem;">Ahmad Fauzi</div>
+              <div style="color:rgba(238,242,248,.72);font-size:.86rem;margin-top:3px;">Anggota · Ranting Ngantru</div>
+              <div style="color:rgba(238,242,248,.5);font-size:.74rem;margin-top:2px;">Aktif sejak 02 Feb 2026</div>
+            </div>
+          </div>
+        </div>
+        <div class="vc-body">
+          <div class="row gap-16" style="align-items:flex-start;">
+            <div class="qr-box" style="flex-shrink:0;" id="heroQr"></div>
+            <div class="stack gap-8" style="font-size:.8rem;min-width:0;">
+              <div>
+                <div class="faint tiny" style="text-transform:uppercase;letter-spacing:.08em;">Nama Panggilan</div>
+                <div style="font-weight:700;">Fauzi</div>
+              </div>
+              <div>
+                <div class="faint tiny" style="text-transform:uppercase;letter-spacing:.08em;">Wilayah</div>
+                <div style="font-weight:700;">Ngantru, Kab. Tulungagung</div>
+              </div>
+              <div class="badge badge-success"><span class="dot"></span> Terverifikasi</div>
+            </div>
+          </div>
+          <div class="divider-soft" style="margin:16px 0;"></div>
+          <div class="row between tiny faint">
+            <span>Scan QR untuk verifikasi keanggotaan</span>
+            <span class="mono">masa berlaku 2031</span>
+          </div>
+        </div>
+      </div>
+      <div class="hero-chip">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        ID unik anti-palsu
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Statistik strip (data real dari database) ===================== -->
+<section class="bg-dim section-tight" style="border-bottom:1px solid var(--line);">
+  <div class="container stat-strip">
+    <div>
+      <div class="stat-num display-l" id="stAktif">—</div>
+      <div class="small muted" data-ck="site.stat1_label">anggota terverifikasi</div>
+    </div>
+    <div>
+      <div class="stat-num display-l" id="stKec">—</div>
+      <div class="small muted" data-ck="site.stat2_label">kecamatan tercakup</div>
+    </div>
+    <div>
+      <div class="stat-num display-l" id="stRant">—</div>
+      <div class="small muted" data-ck="site.stat3_label">ranting terdaftar</div>
+    </div>
+    <div>
+      <div class="stat-num display-l" id="stLeng">—</div>
+      <div class="small muted" data-ck="site.stat4_label">kelengkapan data</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Fitur ===================== -->
+<section class="section" id="fitur">
+  <div class="container">
+    <div class="section-head">
+      <div class="kicker" data-ck="site.fitur_kicker">Kenapa SIKEDA</div>
+      <h2 class="display-xl" data-ck="site.fitur_title">Dibangun untuk pengurus yang serius dengan data.</h2>
+      <p class="lead" data-ck="site.fitur_lead">Bukan sekadar formulir online — seluruh siklus keanggotaan tertangani: dari pendaftaran, verifikasi berjenjang, sampai penerbitan kartu.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card card-pad">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <h3 class="display-s" style="margin-top:16px;" data-ck="site.fitur1_title">OTP tanpa kata sandi</h3>
+        <p class="muted small mt-8" data-ck="site.fitur1_text">Anggota cukup masuk lewat kode sekali pakai ke WhatsApp atau email. Tanpa risiko lupa password.</p>
+      </div>
+      <div class="card card-pad">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <h3 class="display-s" style="margin-top:16px;" data-ck="site.fitur2_title">Verifikasi berjenjang</h3>
+        <p class="muted small mt-8" data-ck="site.fitur2_text">Setiap pengajuan melewati pemeriksaan Admin lalu persetujuan Superadmin — semua tercatat di log audit.</p>
+      </div>
+      <div class="card card-pad">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="13" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M3 10h18M8 15h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="display-s" style="margin-top:16px;" data-ck="site.fitur3_title">Kartu digital + QR</h3>
+        <p class="muted small mt-8" data-ck="site.fitur3_text">ID unik non-berurutan, QR menuju halaman vCard, dan kartu fisik siap cetak ukuran standar ID-1.</p>
+      </div>
+      <div class="card card-pad">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 19V5m0 14h16M8 16v-5m4 5V8m4 8v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="display-s" style="margin-top:16px;" data-ck="site.fitur4_title">Statistik real-time</h3>
+        <p class="muted small mt-8" data-ck="site.fitur4_text">Sebaran anggota per kecamatan, demografi usia, dan tren pendaftaran bulanan langsung dari dashboard.</p>
+      </div>
+      <div class="card card-pad">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M5 8l7-5 7 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 21h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="display-s" style="margin-top:16px;" data-ck="site.fitur5_title">Struktur organisasi</h3>
+        <p class="muted small mt-8" data-ck="site.fitur5_text">Peta DPD → DPC → Ranting tersusun rapi, setiap anggota terhubung ke struktur dan jabatannya.</p>
+      </div>
+      <div class="card card-pad">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="6" rx="8" ry="3" stroke="currentColor" stroke-width="1.6"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <h3 class="display-s" style="margin-top:16px;" data-ck="site.fitur6_title">Data kependudukan aman</h3>
+        <p class="muted small mt-8" data-ck="site.fitur6_text">NIK terenkripsi, backup terjadwal, dan akses berbasis peran: Anggota, Admin, dan Superadmin.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Alur ===================== -->
+<section class="bg-navy section" id="alur">
+  <div class="container split-2">
+    <div>
+      <div class="kicker on-dark" data-ck="site.alur_kicker">Alur keanggotaan</div>
+      <h2 class="display-xl" style="margin-top:12px;" data-ck="site.alur_title">Empat langkah, nol drama.</h2>
+      <p style="margin-top:14px;color:rgba(238,242,248,.72);max-width:46ch;" data-ck="site.alur_lead">
+        Proses transparan dari pengajuan sampai kartu diterbitkan. Anda selalu tahu status pengajuan lewat WhatsApp.
+      </p>
+      <a class="btn btn-gold mt-24" href="daftar.html" data-ck="site.alur_btn">Mulai pendaftaran</a>
+    </div>
+    <ol class="steps-mini" style="margin:0;padding:0;">
+      <li>
+        <div>
+          <div style="font-weight:700;color:#fff;" data-ck="site.alur1_title">Isi formulir &amp; unggah dokumen</div>
+          <div style="font-size:.86rem;color:rgba(238,242,248,.62);margin-top:3px;" data-ck="site.alur1_text">Data diri, domisili, foto, dan KTP. ± 5 menit selesai.</div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div style="font-weight:700;color:#fff;" data-ck="site.alur2_title">Verifikasi Admin</div>
+          <div style="font-size:.86rem;color:rgba(238,242,248,.62);margin-top:3px;" data-ck="site.alur2_text">Pemeriksaan kelengkapan &amp; duplikasi NIK. Jika perlu revisi, Anda diberi catatan.</div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div style="font-weight:700;color:#fff;" data-ck="site.alur3_title">Persetujuan Superadmin</div>
+          <div style="font-size:.86rem;color:rgba(238,242,248,.62);margin-top:3px;" data-ck="site.alur3_text">Approval final — sistem menerbitkan ID unik &amp; akun anggota otomatis.</div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div style="font-weight:700;color:#fff;" data-ck="site.alur4_title">Kartu digital diterbitkan</div>
+          <div style="font-size:.86rem;color:rgba(238,242,248,.62);margin-top:3px;" data-ck="site.alur4_text">vCard + QR aktif seketika, kartu fisik bisa dicetak massal kapan saja.</div>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ===================== Kartu & vCard CTA ===================== -->
+<section class="section" id="kartu">
+  <div class="container split-2">
+    <div class="card card-pad" style="padding:30px;">
+      <div class="row gap-12">
+        <div class="feature-icon navy">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-8 1a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm8 1c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4zm-8 2c-.4 0-.9 0-1.4.1 1 .9 1.4 1.9 1.4 2.9v1h2v-1c0-.7-.4-1.4-1-2A9.6 9.6 0 0 0 8 15z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h3 class="display-s" data-ck="site.kartu_card_title">Halaman vCard anggota</h3>
+          <div class="small muted" data-ck="site.kartu_url_sub">sikeda.id/kta/{id-unik}</div>
+        </div>
+      </div>
+      <p class="muted small mt-16" data-ck="site.kartu_card_text">
+        Setiap kartu punya halaman profil internal: nama, jabatan, wilayah, status keanggotaan, dan tombol simpan kontak.
+        Data sensitif seperti NIK tidak pernah tampil di halaman ini.
+      </p>
+      <div class="row gap-8 mt-16 wrap-flex">
+        <span class="badge badge-success"><span class="dot"></span> Field terkurasi</span>
+        <span class="badge badge-info"><span class="dot"></span> Khusus anggota login</span>
+        <span class="badge badge-gold"><span class="dot"></span> URL non-berurutan</span>
+      </div>
+      <a class="btn btn-outline btn-block mt-24" href="vcard.html?id=GLKR-TA-2026-000018" target="_blank" rel="noopener"><span data-ck="site.kartu_btn">Lihat contoh vCard</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-6-6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
+    <div>
+      <div class="kicker" data-ck="site.kartu_kicker">Kartu anggota</div>
+      <h2 class="display-xl" style="margin-top:12px;" data-ck="site.kartu_title">Satu identitas digital, siap dipakai di dunia nyata.</h2>
+      <ul class="steps-mini" style="margin:24px 0 0;padding:0;">
+        <li><div><div style="font-weight:700;" data-ck="site.kartu1_title">QR menuju vCard</div><div class="small muted" style="margin-top:2px;" data-ck="site.kartu1_text">Petugas event cukup memindai — status keanggotaan tampil seketika.</div></div></li>
+        <li><div><div style="font-weight:700;" data-ck="site.kartu2_title">Cetak massal PDF</div><div class="small muted" style="margin-top:2px;" data-ck="site.kartu2_text">Ukuran kartu kredit (85,6 × 54 mm), siap untuk percetakan.</div></div></li>
+        <li><div><div style="font-weight:700;" data-ck="site.kartu3_title">Riwayat cetak tercatat</div><div class="small muted" style="margin-top:2px;" data-ck="site.kartu3_text">Cetak ulang karena hilang tetap terkontrol dan ber-log.</div></div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Testimoni ===================== -->
+<section class="bg-dim section">
+  <div class="container">
+    <div class="section-head">
+      <div class="kicker" data-ck="site.testi_kicker">Kata pengurus</div>
+      <h2 class="display-xl" data-ck="site.testi_title">Dipercaya di lapangan.</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card card-pad">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style="color:var(--gold-500);"><path d="M7 7h4v4c0 2.8-1.8 5-4 5.7M15 7h4v4c0 2.8-1.8 5-4 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <p style="font-size:.92rem;line-height:1.65;margin-top:14px;" data-ck="site.testi1_quote">"Dulu rekap anggota pakai Excel berserakan. Sekarang satu dashboard, semua ranting tersambung. Approval yang dulu berhari-hari, selesai sore itu juga."</p>
+        <div class="row gap-12 mt-16">
+          <div class="avatar" id="testiAvatar1">BS</div>
+          <div><div style="font-weight:700;font-size:.9rem;" data-ck="site.testi1_name">Budi Santoso</div><div class="tiny faint" data-ck="site.testi1_role">Ketua DPD</div></div>
+        </div>
+      </div>
+      <div class="card card-pad">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style="color:var(--gold-500);"><path d="M7 7h4v4c0 2.8-1.8 5-4 5.7M15 7h4v4c0 2.8-1.8 5-4 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <p style="font-size:.92rem;line-height:1.65;margin-top:14px;" data-ck="site.testi2_quote">"Fitur revisinya membantu banget. Kalau data calon kurang lengkap, kami tinggal beri catatan — pendaftar langsung dapat notifikasi WhatsApp."</p>
+        <div class="row gap-12 mt-16">
+          <div class="avatar" id="testiAvatar2">SR</div>
+          <div><div style="font-weight:700;font-size:.9rem;" data-ck="site.testi2_name">Siti Rahmawati</div><div class="tiny faint" data-ck="site.testi2_role">Sekretaris DPD</div></div>
+        </div>
+      </div>
+      <div class="card card-pad">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style="color:var(--gold-500);"><path d="M7 7h4v4c0 2.8-1.8 5-4 5.7M15 7h4v4c0 2.8-1.8 5-4 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <p style="font-size:.92rem;line-height:1.65;margin-top:14px;" data-ck="site.testi3_quote">"Anggota baru sekarang bisa cek kartunya sendiri lewat HP. Saat musyawarah, verifikasi peserta cukup scan QR — antrean registrasi jauh lebih cepat."</p>
+        <div class="row gap-12 mt-16">
+          <div class="avatar" id="testiAvatar3">JP</div>
+          <div><div style="font-weight:700;font-size:.9rem;" data-ck="site.testi3_name">Joko Prasetyo</div><div class="tiny faint" data-ck="site.testi3_role">Bendahara DPD</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section class="section" id="faq">
+  <div class="container-narrow">
+    <div class="section-head" style="text-align:center;margin-left:auto;margin-right:auto;">
+      <div class="kicker" data-ck="site.faq_kicker">Pertanyaan umum</div>
+      <h2 class="display-xl" data-ck="site.faq_title">Mungkin ini yang Anda tanyakan.</h2>
+    </div>
+    <div class="stack gap-12">
+      <details class="card card-pad" style="padding:0;">
+        <summary style="cursor:pointer;padding:18px 22px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-ck="site.faq1_q">Apakah pendaftaran bayar?</span>
+          <span class="display-m" style="color:var(--gold-600);">+</span>
+        </summary>
+        <p class="muted small" style="padding:0 22px 18px;" data-ck="site.faq1_a">Pendaftaran gratis. Organisasi Anda bisa mengaktifkan modul iuran opsional di dashboard bila diperlukan.</p>
+      </details>
+      <details class="card card-pad" style="padding:0;">
+        <summary style="cursor:pointer;padding:18px 22px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-ck="site.faq2_q">Berapa lama proses verifikasi?</span>
+          <span class="display-m" style="color:var(--gold-600);">+</span>
+        </summary>
+        <p class="muted small" style="padding:0 22px 18px;" data-ck="site.faq2_a">Umumnya 1–2 hari kerja. Anda akan menerima notifikasi WhatsApp di setiap perubahan status.</p>
+      </details>
+      <details class="card card-pad" style="padding:0;">
+        <summary style="cursor:pointer;padding:18px 22px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-ck="site.faq3_q">Bagaimana keamanan data NIK saya?</span>
+          <span class="display-m" style="color:var(--gold-600);">+</span>
+        </summary>
+        <p class="muted small" style="padding:0 22px 18px;" data-ck="site.faq3_a">NIK dienkripsi AES-256 sebelum disimpan, hanya dibuka untuk role berwenang, dan setiap akses tercatat pada log audit.</p>
+      </details>
+      <details class="card card-pad" style="padding:0;">
+        <summary style="cursor:pointer;padding:18px 22px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-ck="site.faq4_q">Saya lupa status pengajuan saya?</span>
+          <span class="display-m" style="color:var(--gold-600);">+</span>
+        </summary>
+        <p class="muted small" style="padding:0 22px 18px;" data-ck="site.faq4_a">Masuk dengan OTP ke nomor yang Anda daftarkan — status pengajuan tampil langsung di dashboard Anda.</p>
+      </details>
+    </div>
+
+    <div class="card-dark card-pad mt-32" style="text-align:center;padding:40px 24px;">
+      <h2 class="display-l" data-ck="site.cta_title">Siap jadi bagian dari kami?</h2>
+      <p style="color:rgba(238,242,248,.75);margin-top:10px;" data-ck="site.cta_lead">Proses pendaftaran kurang dari 10 menit.</p>
+      <div class="row gap-12 mt-24" style="justify-content:center;flex-wrap:wrap;">
+        <a class="btn btn-gold btn-lg" href="daftar.html" data-ck="site.cta_btn1">Daftar Sekarang</a>
+        <a class="btn btn-outline-light btn-lg" href="login.html" data-ck="site.cta_btn2">Masuk</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Footer ===================== -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="brand" style="margin-bottom:14px;">
+          <span class="brand-mark">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          </span>
+          <span>
+            <span class="brand-name" style="display:block;color:#fff;" data-ck="site.header_brand_name">SIKEDA</span>
+            <span class="brand-sub" style="color:rgba(238,242,248,.5);" data-ck="site.header_brand_sub">DPD Nusantara Bersatu · Kab. Tulungagung</span>
+          </span>
+        </div>
+        <p style="font-size:.86rem;line-height:1.65;max-width:40ch;color:rgba(238,242,248,.6);" data-ck="site.footer_about">
+          Sistem pendataan keanggotaan: pendaftaran publik, verifikasi berjenjang, kartu anggota digital, dan dashboard pengelolaan.
+        </p>
+        <p class="tiny" style="margin-top:10px;color:rgba(238,242,248,.45);" data-ck="site.footer_contact"></p>
+      </div>
+      <div>
+        <h4>Halaman</h4>
+        <a href="daftar.html">Pendaftaran</a>
+        <a href="login.html">Masuk</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="vcard.html?id=GLKR-TA-2026-000018">Contoh vCard</a>
+      </div>
+      <div>
+        <h4>Bantuan</h4>
+        <a href="#faq">FAQ</a>
+        <a href="help-verify.html">Cara verifikasi kartu</a>
+        <a href="help-privacy.html">Kebijakan privasi</a>
+        <a href="#" onclick="openContactModal();return false;">Hubungi pengurus</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span data-ck="site.footer_bottom">© 2026 DPD Nusantara Bersatu — Kab. Tulungagung</span>
+      <span data-ck="site.footer_secure">Data kependudukan disimpan terenkripsi sesuai ketentuan yang berlaku</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/api.js"></script>
+<script>
+  /* Deteksi sesi (sadar kedaluwarsa JWT):
+     - belum login / token basi → tombol "Masuk"
+     - login                    → tombol "Dashboard" + chip nama dengan dropdown Keluar */
+  (function(){
+    'use strict';
+    var ICON_DASH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>';
+    var ICON_OUT  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var ICON_CHEV = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var ICON_GRID = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>';
+    function logout(){
+      try { localStorage.removeItem('sikeda_token'); localStorage.removeItem('sikeda_user'); } catch(e){}
+      window.dispatchEvent(new Event('sikeda:session'));
+      location.href = 'login.html';
+    }
+    function initial(nama){
+      nama = String(nama || '').trim();
+      if(!nama) return '?';
+      var w = nama.split(/\s+/);
+      var s = w[0].charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : '');
+      return s.toUpperCase();
+    }
+    function ensureChip(desk){
+      var chip = document.getElementById('hdrUser');
+      if(chip || !desk || !desk.parentNode) return chip;
+      chip = document.createElement('div');
+      chip.id = 'hdrUser'; chip.className = 'hdr-user';
+      chip.innerHTML =
+        '<button type="button" class="hdr-user-btn" id="hdrUserBtn" aria-haspopup="true" aria-expanded="false">' +
+          '<span class="hdr-user-av" id="hdrUserAv">?</span>' +
+          '<span class="hdr-user-name" id="hdrUserName"></span>' + ICON_CHEV +
+        '</button>' +
+        '<div class="hdr-user-menu" id="hdrUserMenu" style="display:none;">' +
+          '<a href="dashboard.html">' + ICON_GRID + ' Dashboard</a>' +
+          '<button type="button" id="hdrLogout">' + ICON_OUT + ' Keluar</button>' +
+        '</div>';
+      desk.parentNode.insertBefore(chip, desk);
+      return chip;
+    }
+    function apply(){
+      var valid = false, nama = '', lvl = '';
+      try {
+        valid = window.SIKAPI && typeof SIKAPI.sessionValid === 'function' && SIKAPI.sessionValid();
+        if(valid){ var u = JSON.parse(localStorage.getItem('sikeda_user') || 'null') || {}; nama = u.nama || u.username || 'Pengguna'; lvl = u.level || ''; }
+      } catch(e){ valid = false; }
+
+      var desk = document.getElementById('hdrLogin');
+      if(desk){
+        if(valid){
+          desk.style.display = 'none';
+          var chip = ensureChip(desk);
+          if(chip){
+            chip.style.display = '';
+            var av = document.getElementById('hdrUserAv');
+            var fp = '';
+            try { fp = (JSON.parse(localStorage.getItem('sikeda_user') || 'null') || {}).foto_path || ''; } catch(e){}
+            if(fp){
+              if(av.dataset.fp !== fp){
+                av.dataset.fp = fp;
+                av.innerHTML = '<img src="/' + String(fp).replace(/[&<>"]/g, '') + '?v=' + Date.now() + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;">';
+                var im = av.querySelector('img');
+                im.addEventListener('error', function(){ delete av.dataset.fp; av.innerHTML = ''; av.textContent = initial(nama); });
+              }
+            } else {
+              delete av.dataset.fp;
+              av.innerHTML = '';
+              av.textContent = initial(nama);
+            }
+            document.getElementById('hdrUserName').textContent = nama;
+          }
+        } else {
+          desk.style.display = '';
+          desk.setAttribute('href', 'login.html');
+          desk.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-ck="site.header_cta">Masuk</span>';
+          var chipOff = document.getElementById('hdrUser');
+          if(chipOff) chipOff.remove();
+        }
+      }
+
+      var mob = document.getElementById('hdrLoginM');
+      if(mob){
+        if(valid){
+          mob.setAttribute('href', 'dashboard.html');
+          mob.removeAttribute('data-ck');
+          mob.textContent = 'Dashboard';
+          var lo = document.getElementById('hdrLogoutM');
+          if(!lo){
+            lo = document.createElement('a');
+            lo.id = 'hdrLogoutM'; lo.href = '#';
+            lo.innerHTML = 'Keluar';
+            lo.addEventListener('click', function(ev){ ev.preventDefault(); logout(); });
+            mob.parentNode.appendChild(lo);
+          }
+          lo.style.display = '';
+        } else {
+          mob.setAttribute('href', 'login.html');
+          mob.setAttribute('data-ck', 'site.header_cta');
+          mob.textContent = 'Masuk ke SIKEDA';
+          var lo2 = document.getElementById('hdrLogoutM');
+          if(lo2) lo2.style.display = 'none';
+        }
+      }
+    }
+
+    /* Interaksi dropdown (delegasi — chip dibuat dinamis) */
+    document.addEventListener('click', function(e){
+      var chip = document.getElementById('hdrUser');
+      if(!chip) return;
+      var btn = document.getElementById('hdrUserBtn');
+      var menu = document.getElementById('hdrUserMenu');
+      if(!btn || !menu) return;
+      if(btn.contains(e.target)){
+        var open = menu.style.display !== 'none';
+        menu.style.display = open ? 'none' : 'block';
+        btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      } else if(!chip.contains(e.target)){
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+      var lo = document.getElementById('hdrLogout');
+      if(lo && lo.contains(e.target)) logout();
+    });
+
+    apply();
+    /* Realtime: login/logout di tab lain + sesi baru di tab ini */
+    window.addEventListener('storage', apply);
+    window.addEventListener('sikeda:session', apply);
+    setInterval(apply, 60000); /* token basi otomatis kembali jadi "Masuk" */
+  })();
+</script>
+<script src="assets/js/branding.js"></script>
+<script src="assets/js/sikeda.js"></script>
+<script>
+  /* Statistik real dari database */
+  (function(){
+    function fmt(n){ return new Intl.NumberFormat('id-ID').format(n); }
+    fetch('/api/public/stats').then(function(r){ return r.json(); }).then(function(j){
+      if(!j.ok) return;
+      document.getElementById('stAktif').textContent = fmt(j.data.anggotaAktif);
+      document.getElementById('stKec').textContent = fmt(j.data.kecamatan);
+      document.getElementById('stRant').textContent = fmt(j.data.ranting);
+      document.getElementById('stLeng').textContent = String(j.data.kelengkapan).replace('.', ',') + '%';
+    }).catch(function(){});
+  })();
+</script>
+<script>
+  /* QR pada kartu hero */
+  document.getElementById('heroQr').innerHTML = SIK.qr('https://sikeda.id/kta/glkr-ta-2026-000018', { scale: 5, size: 104 });
+</script>
+<script>
+  /* Konten dinamis dari dashboard (Website → Beranda) — teks fallback HTML dipakai bila API gagal */
+  (function(){
+    fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+      if(!j.ok || !j.data) return;
+      document.querySelectorAll('[data-ck]').forEach(function(el){
+        var v = j.data[el.getAttribute('data-ck')];
+        if(v) el.textContent = v;
+      });
+      /* Foto testimoni: ganti inisial dengan foto bila tersedia */
+      [1, 2, 3].forEach(function(n){
+        var p = j.data['site.testi' + n + '_photo'];
+        var av = document.getElementById('testiAvatar' + n);
+        if(p && av){
+          av.textContent = '';
+          av.style.padding = '0';
+          av.style.overflow = 'hidden';
+          av.innerHTML = '<img src="/' + p + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
+        }
+      });
+    }).catch(function(){});
+  })();
+</script>
+
+<!-- ===================== Popup Hubungi Pengurus ===================== -->
+<div class="modal-back" id="contactModal" onclick="if(event.target===this)closeContactModal()">
+  <div class="modal-card">
+    <button class="modal-x" onclick="closeContactModal()" aria-label="Tutup">×</button>
+    <div class="cm-head">
+      <div class="cm-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <h3>Hubungi Pengurus</h3>
+        <p data-ck="site.help_contact_note">Pesan akan diteruskan ke pengurus DPD melalui Telegram resmi.</p>
+      </div>
+    </div>
+    <div class="cm-card mt-16">
+      <label for="cmNama">Nama</label>
+      <input id="cmNama" placeholder="Nama lengkap Anda" maxlength="80" autocomplete="name">
+    </div>
+    <div class="cm-card mt-12">
+      <label for="cmKontak">Kontak balasan</label>
+      <input id="cmKontak" placeholder="WhatsApp / Telegram / Email" maxlength="80">
+    </div>
+    <div class="cm-card mt-12">
+      <label for="cmPesan">Pesan</label>
+      <textarea id="cmPesan" rows="5" placeholder="Tuliskan pertanyaan atau pesan Anda…" maxlength="1000"></textarea>
+      <span class="cm-count"><span id="cmCount">0</span>/1000</span>
+    </div>
+    <div class="err" id="cmErr" style="display:none;"></div>
+    <div class="ok-msg" id="cmOk" style="display:none;"></div>
+    <button class="cm-send mt-16" id="cmSend">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="cmSendLbl">Kirim melalui Telegram</span>
+    </button>
+  </div>
+</div>
+<script>
+(function(){
+  'use strict';
+  window.openContactModal = function(){
+    document.getElementById('contactModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+  window.closeContactModal = function(){
+    document.getElementById('contactModal').classList.remove('open');
+    document.body.style.overflow = '';
+  };
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') window.closeContactModal();
+  });
+  /* Catatan kecil di form ikut konten dinamis */
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok || !j.data) return;
+    document.querySelectorAll('#contactModal [data-ck]').forEach(function(el){
+      var v = j.data[el.getAttribute('data-ck')];
+      if(v) el.textContent = v;
+    });
+  }).catch(function(){});
+  /* Penghitung karakter pesan */
+  var pesanEl = document.getElementById('cmPesan');
+  var countEl = document.getElementById('cmCount');
+  pesanEl.addEventListener('input', function(){ countEl.textContent = String(pesanEl.value.length); });
+  var sending = false;
+  var sendLbl = document.getElementById('cmSendLbl');
+  document.getElementById('cmSend').addEventListener('click', function(){
+    if(sending) return;
+    var nama = (document.getElementById('cmNama').value || '').trim();
+    var kontak = (document.getElementById('cmKontak').value || '').trim();
+    var pesan = (document.getElementById('cmPesan').value || '').trim();
+    var err = document.getElementById('cmErr'), ok = document.getElementById('cmOk');
+    err.style.display = 'none'; ok.style.display = 'none';
+    if(!nama || !kontak || !pesan){ err.textContent = 'Nama, kontak, dan pesan wajib diisi.'; err.style.display = 'block'; return; }
+    if(pesan.length < 10){ err.textContent = 'Pesan terlalu pendek (minimal 10 karakter).'; err.style.display = 'block'; return; }
+    sending = true;
+    var btn = this; btn.disabled = true; sendLbl.textContent = 'Mengirim…';
+    fetch('/api/public/contact', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nama: nama, kontak: kontak, pesan: pesan })
+    }).then(function(r){ return r.json(); }).then(function(j){
+      sending = false; btn.disabled = false; sendLbl.textContent = 'Kirim melalui Telegram';
+      if(!j.ok){ err.textContent = j.error || 'Gagal mengirim pesan.'; err.style.display = 'block'; return; }
+      ok.textContent = j.message || 'Pesan terkirim.'; ok.style.display = 'block';
+      document.getElementById('cmNama').value = '';
+      document.getElementById('cmKontak').value = '';
+      document.getElementById('cmPesan').value = '';
+      setTimeout(window.closeContactModal, 1800);
+    }).catch(function(){
+      sending = false; btn.disabled = false; sendLbl.textContent = 'Kirim melalui Telegram';
+      err.textContent = 'Koneksi bermasalah, coba lagi.'; err.style.display = 'block';
+    });
+  });
+})();
+</script>
+</body>
+</html>

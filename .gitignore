@@ -1,0 +1,16 @@
+# Dependensi & build
+node_modules/
+
+# Rahasia — JANGAN pernah commit (isi env di dashboard Render)
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# Log & berkas sementara
+*.log
+tmp/
+tmp-db.sql
+
+# Sistem
+.DS_Store

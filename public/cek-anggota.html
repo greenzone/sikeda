@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cek Anggota — SIKEDA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/sikeda.css">
+<script src="assets/js/api.js"></script>
+<style>
+  /* Footer menempel di bawah layar meski konten pendek */
+  html{height:100%;}
+  body{min-height:100vh;display:flex;flex-direction:column;}
+  .page-main{flex:1 0 auto;}
+  footer.site-footer{margin-top:auto;}
+  /* Tombol kembali di header halaman sekunder */
+  .page-back{
+    display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:9px 18px;
+    border-radius:11px;background:var(--paper-dim);color:var(--ink);
+    font-weight:700;font-size:.84rem;text-decoration:none;border:1px solid var(--line);
+    transition:all .15s ease;
+  }
+  .page-back:hover{background:var(--line-soft);transform:translateX(-2px);}
+  .page-back svg{flex-shrink:0;}
+  /* Kartu hasil di dalam popup */
+  .rv-person{display:flex;align-items:center;gap:14px;margin-top:18px;}
+  .rv-rows{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+  .rv-rows .row{padding:5px 0;}
+</style>
+<script>
+(function(){
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    var d = (j && j.ok && j.data) || {};
+    var st = document.createElement('style');
+    var p = d['site.theme_primary'], a = d['site.theme_accent'];
+    if(p || a){
+      st.textContent = ':root{'
+        + (p ? '--navy-700:' + p + ';--navy-800:' + p + ';--navy-900:' + p + ';--navy-600:' + p + ';' : '')
+        + (a ? '--gold-500:' + a + ';--gold-400:' + a + ';--gold-600:' + a + ';' : '')
+        + '}';
+    }
+    document.head.appendChild(st);
+  }).catch(function(){});
+})();
+</script>
+</head>
+<body>
+
+<!-- ===================== Header ===================== -->
+<header class="site-header">
+  <div class="appbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;" data-ck="site.header_brand_name">SIKEDA</span>
+        <span class="brand-sub" data-ck="site.header_brand_sub">DPD Nusantara Bersatu · Kab. Tulungagung</span>
+      </span>
+    </a>
+    <nav class="main-nav">
+      <a class="page-back" href="index.html">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Kembali ke beranda
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== Konten ===================== -->
+<main class="page-main">
+<section class="section" style="padding:44px 0;">
+  <div class="container" style="max-width:620px;">
+
+    <!-- Gate: belum login -->
+    <div id="gateLogin" class="card card-pad" style="padding:32px;text-align:center;">
+      <div class="feature-icon navy" style="margin:0 auto;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg>
+      </div>
+      <h1 class="display-s" style="margin-top:16px;" data-ck="site.cek_locked_title">Cek Anggota</h1>
+      <p class="muted small mt-8" style="white-space:pre-line;" data-ck="site.cek_locked_lead">Fitur ini khusus pengguna yang sudah masuk ke portal.<br>Silakan masuk menggunakan akun anggota Anda terlebih dahulu.</p>
+      <a class="btn btn-primary btn-block mt-16" href="login.html">Masuk sekarang</a>
+    </div>
+
+    <!-- Form cek -->
+    <div id="cekForm" style="display:none;">
+      <div class="kicker">Verifikasi keanggotaan</div>
+      <h1 class="display-l" style="margin-top:10px;" data-ck="site.cek_title">Cek Anggota</h1>
+      <p class="muted small mt-8" style="white-space:pre-line;" data-ck="site.cek_lead">Masukkan ID anggota (contoh: GLKR-TA-2026-000018) untuk memeriksa status keanggotaan.</p>
+      <div class="card card-pad mt-24" style="padding:26px;">
+        <div class="field">
+          <label>ID Anggota</label>
+          <div class="input-shell">
+            <input id="inKode" placeholder="GLKR-TA-2026-…" autocomplete="off" style="text-transform:uppercase;">
+          </div>
+        </div>
+        <div class="err" id="cekErr" style="display:none;"></div>
+        <button class="btn btn-primary btn-block mt-16" id="btnCek">Periksa keanggotaan</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+</main>
+
+<!-- ===================== Footer (sama dengan halaman depan) ===================== -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="brand" style="margin-bottom:14px;">
+          <span class="brand-mark">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6.5V11c0 5.2 3.6 9.9 9 11 5.4-1.1 9-5.8 9-11V6.5L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          </span>
+          <span>
+            <span class="brand-name" style="display:block;color:#fff;" data-ck="site.header_brand_name">SIKEDA</span>
+            <span class="brand-sub" style="color:rgba(238,242,248,.5);" data-ck="site.header_brand_sub">DPD Nusantara Bersatu · Kab. Tulungagung</span>
+          </span>
+        </div>
+        <p style="font-size:.86rem;line-height:1.65;max-width:40ch;color:rgba(238,242,248,.6);" data-ck="site.footer_about">
+          Sistem pendataan keanggotaan: pendaftaran publik, verifikasi berjenjang, kartu anggota digital, dan dashboard pengelolaan.
+        </p>
+        <p class="tiny" style="margin-top:10px;color:rgba(238,242,248,.45);" data-ck="site.footer_contact"></p>
+      </div>
+      <div>
+        <h4>Halaman</h4>
+        <a href="daftar.html">Pendaftaran</a>
+        <a href="login.html">Masuk</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="vcard.html?id=GLKR-TA-2026-000018">Contoh vCard</a>
+      </div>
+      <div>
+        <h4>Bantuan</h4>
+        <a href="index.html#faq">FAQ</a>
+        <a href="help-verify.html">Cara verifikasi kartu</a>
+        <a href="help-privacy.html">Kebijakan privasi</a>
+        <a href="index.html" onclick="if(window.opener&&window.opener.openContactModal){window.opener.openContactModal();return false;}">Hubungi pengurus</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span data-ck="site.footer_bottom">© 2026 DPD Nusantara Bersatu — Kab. Tulungagung</span>
+      <span data-ck="site.footer_secure">Data kependudukan disimpan terenkripsi sesuai ketentuan yang berlaku</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ===================== Popup hasil pemeriksaan ===================== -->
+<div class="modal-back" id="hasilModal" onclick="if(event.target===this)closeHasil()">
+  <div class="modal-card" style="max-width:470px;">
+    <button class="modal-x" onclick="closeHasil()" aria-label="Tutup">×</button>
+    <div class="cm-head">
+      <div class="cm-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/></svg>
+      </div>
+      <div>
+        <h3 style="margin:0;font-size:1.15rem;font-weight:800;color:var(--ink);">Hasil Pemeriksaan</h3>
+        <p style="margin:3px 0 0;color:var(--ink-faint);font-size:.83rem;">Status keanggotaan berdasarkan ID yang diperiksa.</p>
+      </div>
+    </div>
+
+    <div class="rv-person">
+      <div class="avatar lg" id="hAvatar"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:800;font-size:1.02rem;" id="hNama">—</div>
+        <div class="small muted" id="hJabatan">—</div>
+      </div>
+      <span class="badge" id="hBadge"></span>
+    </div>
+
+    <div class="rv-rows small">
+      <div class="row between"><span class="muted">ID Anggota</span><strong id="hKode">—</strong></div>
+      <div class="row between"><span class="muted">Wilayah</span><strong id="hWilayah">—</strong></div>
+      <div class="row between"><span class="muted">Status</span><strong id="hStatus">—</strong></div>
+    </div>
+
+    <a id="hVcardBtn" class="btn btn-check btn-block mt-16" href="#" target="_blank" rel="noopener">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="5" width="19" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="11" r="2" stroke="currentColor" stroke-width="1.8"/><path d="M5.8 16c.5-1.6 1.5-2.4 2.7-2.4s2.2.8 2.7 2.4M14 9.5h4.5M14 13h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Lihat vCard anggota
+    </a>
+    <button class="btn btn-soft btn-block" style="margin-top:10px;" onclick="closeHasil()">Tutup</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok || !j.data) return;
+    document.querySelectorAll('[data-ck]').forEach(function(el){
+      var v = j.data[el.getAttribute('data-ck')];
+      if(v) el.textContent = v;
+    });
+  }).catch(function(){});
+
+  /* Wajib login (sadar kedaluwarsa JWT) — ikut reaksi bila sesi berubah di tab lain */
+  function gate(){
+    var ok = SIKAPI.sessionValid();
+    document.getElementById('gateLogin').style.display = ok ? 'none' : 'block';
+    document.getElementById('cekForm').style.display = ok ? 'block' : 'none';
+    return ok;
+  }
+  if(!gate()) return;
+  window.addEventListener('storage', gate);
+  window.addEventListener('sikeda:session', gate);
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  window.closeHasil = function(){
+    document.getElementById('hasilModal').classList.remove('open');
+    document.body.style.overflow = '';
+  };
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') window.closeHasil(); });
+
+  function render(d){
+    document.getElementById('hNama').textContent = d.nama;
+    document.getElementById('hJabatan').textContent = d.jabatan;
+    document.getElementById('hKode').textContent = d.kode_unik;
+    document.getElementById('hWilayah').textContent = (d.kecamatan || '-') + ' / ' + (d.desa || '-');
+    document.getElementById('hStatus').textContent = d.status;
+    var badge = document.getElementById('hBadge');
+    badge.textContent = d.valid ? 'VALID' : 'TIDAK AKTIF';
+    badge.className = 'badge ' + (d.valid ? 'badge-success' : 'badge-warn');
+    var av = document.getElementById('hAvatar');
+    if(d.foto_path){
+      var initials = d.nama.split(' ').map(function(w){ return w[0] || ''; }).slice(0, 2).join('').toUpperCase();
+      av.textContent = '';
+      av.style.padding = '0';
+      av.style.overflow = 'hidden';
+      av.innerHTML = '<img src="/' + esc(d.foto_path) + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
+      av.querySelector('img').addEventListener('error', function(){ av.textContent = initials; av.style.padding = ''; av.style.overflow = ''; });
+    } else {
+      av.textContent = d.nama.split(' ').map(function(w){ return w[0] || ''; }).slice(0, 2).join('').toUpperCase();
+    }
+    document.getElementById('hVcardBtn').href = 'vcard.html?id=' + encodeURIComponent(d.kode_unik);
+    document.getElementById('hasilModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function cek(){
+    var kode = (document.getElementById('inKode').value || '').trim().toUpperCase();
+    var err = document.getElementById('cekErr');
+    err.style.display = 'none';
+    if(!kode){ err.textContent = 'ID anggota wajib diisi.'; err.style.display = 'block'; return; }
+    var btn = document.getElementById('btnCek');
+    btn.disabled = true; btn.textContent = 'Memeriksa…';
+    SIKAPI.get('/members/check/' + encodeURIComponent(kode)).then(function(r){
+      btn.disabled = false; btn.textContent = 'Periksa keanggotaan';
+      if(!r.ok){ err.textContent = r.error || 'Gagal memeriksa.'; err.style.display = 'block'; return; }
+      render(r.data);
+    }).catch(function(e){
+      btn.disabled = false; btn.textContent = 'Periksa keanggotaan';
+      err.textContent = e.message || 'Gagal memeriksa.'; err.style.display = 'block';
+    });
+  }
+  document.getElementById('btnCek').addEventListener('click', cek);
+  document.getElementById('inKode').addEventListener('keydown', function(e){ if(e.key === 'Enter') cek(); });
+})();
+</script>
+</body>
+</html>

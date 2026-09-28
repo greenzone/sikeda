@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>__DOC_TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { width: 210mm; }
+  body {
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;
+    color: #1c2733;
+    background: #ffffff;
+  }
+
+  /* ============================================================
+     HALAMAN 1 — dokumen resmi keanggotaan
+     ============================================================ */
+  .sheet {
+    position: relative;
+    width: 210mm; height: 297mm;
+    padding: 10mm 14mm 8mm;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    page-break-after: always;
+  }
+  .sheet::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3.2mm;
+    background: linear-gradient(180deg, #0b1d33 0%, #152c4d 55%, #d4a053 100%);
+  }
+  .watermark {
+    position: absolute; inset: 0; pointer-events: none; opacity: .03;
+    font-family: 'Sora', Arial, sans-serif; font-weight: 800; color: #0b1d33;
+    font-size: 34mm; letter-spacing: 8mm; text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    transform: rotate(-28deg);
+  }
+
+  /* ---------- kop dokumen ---------- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8mm;
+    border-bottom: 2.2pt solid #d4a053;
+    padding-bottom: 3.2mm; margin-bottom: 4mm;
+  }
+  .orgmark { display: flex; align-items: center; gap: 4mm; min-width: 0; }
+  .orglogo {
+    width: 12mm; height: 12mm; border-radius: 2mm; background: #0b1d33;
+    display: flex; align-items: center; justify-content: center; color: #eac06a; flex-shrink: 0; overflow: hidden;
+  }
+  .orglogo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .orglogo svg { width: 8mm; height: 8mm; }
+  .orgtext { min-width: 0; }
+  .orgname { font-family: 'Sora', Arial, sans-serif; font-weight: 800; font-size: 7.4mm; color: #0b1d33; line-height: 1.05; }
+  .orgsub  { font-size: 2.8mm; color: #5c6a78; margin-top: 1mm; font-weight: 600; }
+  .docmeta { text-align: right; font-size: 2.7mm; color: #5c6a78; line-height: 1.5; flex-shrink: 0; }
+  .docmeta .doclabel { text-transform: uppercase; letter-spacing: .9px; font-size: 2.1mm; color: #8a94a1; font-weight: 700; }
+  .docmeta .docno { font-family: 'Sora', Arial, sans-serif; font-weight: 700; color: #0b1d33; font-size: 3.1mm; letter-spacing: .4px; }
+
+  /* ---------- judul dokumen ---------- */
+  .doctitle { text-align: center; margin-bottom: 4.6mm; }
+  .doctitle .dt1 { font-family: 'Sora', Arial, sans-serif; font-weight: 800; font-size: 5mm; color: #0b1d33; letter-spacing: 1.4px; text-transform: uppercase; }
+  .doctitle .dt2 { font-size: 2.8mm; color: #8a94a1; font-weight: 600; letter-spacing: 2.4px; text-transform: uppercase; margin-top: 1.2mm; }
+
+  /* ---------- kartu depan + belakang, UKURAN SEBENARNYA (ID-1) ---------- */
+  .cards-row { display: flex; justify-content: center; gap: 9mm; margin-bottom: 2.6mm; }
+  .cardcol { width: 85.6mm; text-align: center; }
+  .cardframe { width: 85.6mm; height: 53.98mm; }
+  .cardframe img { width: 85.6mm; height: 53.98mm; display: block; }
+  .cardcol .ccap {
+    margin-top: 1.6mm; font-size: 2.3mm; font-weight: 700; letter-spacing: 1.6px;
+    text-transform: uppercase; color: #8a94a1;
+  }
+  .cardcol .ccap b { color: #0b1d33; font-family: 'Sora', Arial, sans-serif; }
+
+  /* ---------- baris verifikasi ---------- */
+  .verif-line { display: flex; align-items: center; gap: 2.4mm; margin: 1.4mm 0 3.4mm; }
+  .verif-line .dot { width: 1.8mm; height: 1.8mm; background: #2e8b47; border-radius: 50%; flex-shrink: 0; }
+  .verif-line .txt { font-weight: 600; color: #0c6b47; font-size: 2.8mm; line-height: 1.4; }
+  .verif-line .txt .mono { font-family: 'Sora', Arial, sans-serif; font-size: 2.5mm; }
+
+  /* ---------- grid data ringkas (3 kolom) ---------- */
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 7mm; row-gap: 1.6mm; margin-bottom: 3mm; }
+  .g { border-bottom: .6pt solid #e7ebf0; padding-bottom: 1.4mm; min-width: 0; }
+  .g.wide { grid-column: 1 / -1; }
+  .gk { font-size: 2.2mm; color: #8a94a1; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; }
+  .gv { font-size: 3.2mm; color: #1c2733; font-weight: 700; line-height: 1.35; margin-top: .7mm; word-break: break-word; }
+  .gv.mono { font-family: 'Sora', Arial, sans-serif; letter-spacing: .4px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 1.5mm;
+    font-size: 2.8mm; font-weight: 700; padding: .9mm 2.8mm; border-radius: 4mm; letter-spacing: .3px;
+  }
+  .badge .dot { width: 1.6mm; height: 1.6mm; border-radius: 50%; background: currentColor; }
+  .badge.ok { background: #e7f5ec; color: #0c6b47; border: .6pt solid #bfe3cd; }
+  .badge.wa { background: #fdeaea; color: #b3261e; border: .6pt solid #f3c1be; }
+
+  /* ---------- tanda tangan ---------- */
+  .sig {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6mm;
+    margin-top: 4mm; padding-top: 3.6mm; border-top: .7pt dashed #d4dbe2;
+  }
+  .sigblock { font-size: 2.8mm; color: #1c2733; font-weight: 700; line-height: 1.5; }
+  .sigblock .siglabel { font-size: 2.1mm; color: #8a94a1; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; margin-bottom: 7.5mm; }
+  .sigblock .sigline { border-bottom: .8pt solid #1c2733; margin: 0 2mm 1.5mm; height: 0; }
+  .sigblock .sigsub { color: #5c6a78; font-weight: 600; font-size: 2.5mm; }
+
+  /* ---------- footer ---------- */
+  .footer {
+    margin-top: auto; border-top: 1.2pt solid #d4a053; padding-top: 2.8mm;
+    font-size: 2.4mm; color: #5c6a78; line-height: 1.5;
+    display: flex; justify-content: space-between; align-items: center; gap: 6mm;
+  }
+  .footer .seal {
+    width: 10mm; height: 10mm; border: 1.2pt solid #0b1d33; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; color: #0b1d33;
+    font-family: 'Sora', Arial, sans-serif; font-weight: 800; font-size: 3.2mm;
+    flex-shrink: 0; background: #fff;
+  }
+  .footer .fnote { flex: 1; }
+  .footer strong { color: #1c2733; }
+  .footer .ft-meta { text-align: right; flex-shrink: 0; font-size: 2.3mm; }
+  .footer .ft-meta .docno2 { font-family: 'Sora', Arial, sans-serif; font-weight: 700; color: #0b1d33; font-size: 2.7mm; }
+
+  /* ============================================================
+     HALAMAN 2 — MASTER CETAK KARTU (ukuran sebenarnya, ID-1)
+     Gunakan skala 100% / "Actual Size" saat mencetak.
+     ============================================================ */
+  .master {
+    position: relative;
+    width: 210mm; height: 297mm;
+    padding: 12mm 14mm 10mm;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .master::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3.2mm;
+    background: linear-gradient(180deg, #0b1d33 0%, #152c4d 55%, #d4a053 100%);
+  }
+  .m-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6mm; border-bottom: 1.4pt solid #0b1d33; padding-bottom: 2.6mm; }
+  .m-head .mt1 { font-family: 'Sora', Arial, sans-serif; font-weight: 800; font-size: 5.2mm; color: #0b1d33; letter-spacing: 1.2px; text-transform: uppercase; }
+  .m-head .mt2 { font-size: 2.7mm; color: #b3261e; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
+  .m-note { font-size: 2.7mm; color: #5c6a78; line-height: 1.5; margin: 2.6mm 0 1mm; }
+  .m-note b { color: #0b1d33; }
+
+  /* kartu master: persis 85,60 × 53,98 mm + garis potong */
+  .mastercard { position: relative; width: 85.6mm; height: 53.98mm; margin: 7mm auto 0; }
+  .mastercard img { width: 85.6mm; height: 53.98mm; display: block; }
+  .mcap { text-align: center; font-size: 2.4mm; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: #8a94a1; margin-top: 2mm; }
+  /* tanda potong: garis di luar tiap sudut */
+  .mark { position: absolute; background: #444; }
+  .mark.h { width: 4mm; height: .3mm; }
+  .mark.v { width: .3mm; height: 4mm; }
+  .mk-tl-h { top: -.15mm;  left: -5mm; }
+  .mk-tl-v { top: -5mm;    left: -.15mm; }
+  .mk-tr-h { top: -.15mm;  right: -5mm; }
+  .mk-tr-v { top: -5mm;    right: -.15mm; }
+  .mk-bl-h { bottom: -.15mm; left: -5mm; }
+  .mk-bl-v { bottom: -5mm;   left: -.15mm; }
+  .mk-br-h { bottom: -.15mm; right: -5mm; }
+  .mk-br-v { bottom: -5mm;   right: -.15mm; }
+
+  .m-specs {
+    margin-top: 8mm; border: .8pt solid #d4dbe2; border-radius: 2mm;
+    padding: 3.4mm 4.4mm; font-size: 2.7mm; color: #1c2733; line-height: 1.75;
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm;
+  }
+  .m-specs .sk { color: #8a94a1; font-weight: 700; text-transform: uppercase; font-size: 2.1mm; letter-spacing: .7px; }
+  .m-specs .sv { font-weight: 700; }
+  .m-specs .mono { font-family: 'Sora', Arial, sans-serif; }
+  .m-foot { margin-top: auto; border-top: .7pt dashed #d4dbe2; padding-top: 2.6mm; font-size: 2.3mm; color: #8a94a1; text-align: center; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<!-- ============================ HALAMAN 1 ============================ -->
+<div class="sheet">
+  <div class="watermark">SIKEDA</div>
+
+  <!-- Kop dokumen -->
+  <div class="topbar">
+    <div class="orgmark">
+      <div class="orglogo" id="pdfLogoWrap">__LOGO_HTML__</div>
+      <div class="orgtext">
+        <div class="orgname">__ORG__</div>
+        <div class="orgsub">__WILAYAH__</div>
+      </div>
+    </div>
+    <div class="docmeta">
+      <div class="doclabel">Dokumen Resmi</div>
+      <div class="docno">__DOCNO__</div>
+      <div>Diterbitkan __TGL_CETAK__</div>
+    </div>
+  </div>
+
+  <!-- Judul -->
+  <div class="doctitle">
+    <div class="dt1">Kartu Tanda Anggota</div>
+    <div class="dt2">Keanggotaan Resmi · Berlaku 3 Tahun · Ukuran Sebenarnya ID-1</div>
+  </div>
+
+  <!-- Kartu depan + belakang (gambar hasil render, ukuran fisik 85,60 × 53,98 mm) -->
+  <div class="cards-row">
+    <div class="cardcol">
+      <div class="cardframe"><img src="__FRONT_IMG__" alt="Kartu sisi depan"></div>
+      <div class="ccap">Sisi <b>Depan</b></div>
+    </div>
+    <div class="cardcol">
+      <div class="cardframe"><img src="__BACK_IMG__" alt="Kartu sisi belakang"></div>
+      <div class="ccap">Sisi <b>Belakang</b></div>
+    </div>
+  </div>
+
+  <!-- Verifikasi -->
+  <div class="verif-line">
+    <span class="dot"></span>
+    <span class="txt">Terverifikasi resmi — pindai QR pada kartu atau buka <span class="mono">__VERIF_URL__</span></span>
+  </div>
+
+  <!-- Data lengkap -->
+  <div class="g3">
+    <div class="g"><div class="gk">Nama Lengkap</div><div class="gv">__NAMA__</div></div>
+    <div class="g"><div class="gk">No. Anggota</div><div class="gv mono">__KODE__</div></div>
+    <div class="g"><div class="gk">NPAPG (NIK)</div><div class="gv mono">__NPAPG__</div></div>
+    <div class="g"><div class="gk">Jabatan</div><div class="gv">__JABATAN__</div></div>
+    <div class="g"><div class="gk">Ranting / Desa</div><div class="gv">__DESA__</div></div>
+    <div class="g"><div class="gk">Kecamatan (DPC)</div><div class="gv">__KEC__</div></div>
+    <div class="g"><div class="gk">Tempat, Tgl Lahir</div><div class="gv">__TTL__</div></div>
+    <div class="g"><div class="gk">Jenis Kelamin</div><div class="gv">__GENDER__</div></div>
+    <div class="g"><div class="gk">Pekerjaan</div><div class="gv">__KERJA__</div></div>
+    <div class="g"><div class="gk">No. WhatsApp</div><div class="gv">__WA__</div></div>
+    <div class="g"><div class="gk">Email</div><div class="gv">__EMAIL__</div></div>
+    <div class="g"><div class="gk">Telegram</div><div class="gv">__TG__</div></div>
+    <div class="g"><div class="gk">Status</div><div class="gv">__STATUS_BADGE__</div></div>
+    <div class="g"><div class="gk">Terdaftar sejak</div><div class="gv">__REG__</div></div>
+    <div class="g"><div class="gk">Masa berlaku</div><div class="gv">__VALID__</div></div>
+    <div class="g wide"><div class="gk">Alamat Lengkap</div><div class="gv">__ALAMAT__</div></div>
+  </div>
+
+  <!-- Tanda tangan -->
+  <div class="sig">
+    <div class="sigblock">
+      <div class="siglabel">Diterbitkan oleh</div>
+      <div class="sigline"></div>
+      Ketua DPD<br><span class="sigsub">__ORG__</span>
+    </div>
+    <div class="sigblock">
+      <div class="siglabel">Mengetahui</div>
+      <div class="sigline"></div>
+      Sekretaris DPD<br><span class="sigsub">__WILAYAH__</span>
+    </div>
+    <div class="sigblock" style="text-align:right;">
+      <div class="siglabel">Tanggal cetak</div>
+      <div class="sigline" style="margin-left:auto;"></div>
+      __TGL_CETAK__
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="seal">BP</div>
+    <div class="fnote">
+      <strong>Dokumen ini sah dan berlaku hanya atas nama pemiliknya</strong> serta tidak dapat dipindahtangankan.
+      Permohonan perubahan data atau kehilangan kartu disampaikan kepada pengurus DPC setempat.
+    </div>
+    <div class="ft-meta">
+      <div class="docno2">__DOCNO__</div>
+      <div>SIKEDA · Kartu Keanggotaan Digital</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ HALAMAN 2 ============================
+     MASTER CETAK — kartu pada ukuran sebenarnya (85,60 × 53,98 mm,
+     standar ISO/IEC 7810 ID-1) + tanda potong. Cetak 100% / Actual Size.
+     ==================================================================== -->
+<div class="master">
+  <div class="m-head">
+    <div class="mt1">Master Cetak Kartu Anggota</div>
+    <div class="mt2">Cetak 100% · Actual Size</div>
+  </div>
+  <div class="m-note">
+    Kedua sisi di bawah ini berukuran <b>persis 85,60 × 53,98 mm</b> (standar ID-1). Garis potong berada di luar sudut kartu.
+    Gunakan toleransi potong ±0,5 mm dan jangan menskalakan dokumen saat mencetak.
+  </div>
+
+  <div class="mastercard">
+    <img src="__FRONT_IMG__" alt="Master sisi depan">
+    <span class="mark h mk-tl-h"></span><span class="mark v mk-tl-v"></span>
+    <span class="mark h mk-tr-h"></span><span class="mark v mk-tr-v"></span>
+    <span class="mark h mk-bl-h"></span><span class="mark v mk-bl-v"></span>
+    <span class="mark h mk-br-h"></span><span class="mark v mk-br-v"></span>
+  </div>
+  <div class="mcap">Master Sisi Depan — __KODE__</div>
+
+  <div class="mastercard">
+    <img src="__BACK_IMG__" alt="Master sisi belakang">
+    <span class="mark h mk-tl-h"></span><span class="mark v mk-tl-v"></span>
+    <span class="mark h mk-tr-h"></span><span class="mark v mk-tr-v"></span>
+    <span class="mark h mk-bl-h"></span><span class="mark v mk-bl-v"></span>
+    <span class="mark h mk-br-h"></span><span class="mark v mk-br-v"></span>
+  </div>
+  <div class="mcap">Master Sisi Belakang — __KODE__</div>
+
+  <div class="m-specs">
+    <div><div class="sk">Ukuran kartu</div><div class="sv">85,60 × 53,98 mm (ISO/IEC 7810 ID-1)</div></div>
+    <div><div class="sk">Sudut radius</div><div class="sv">3,18 mm (radius pabrik standar)</div></div>
+    <div><div class="sk">Skala cetak</div><div class="sv">100% — Actual Size (jangan "Fit to page")</div></div>
+    <div><div class="sk">Kertas rekomendasi</div><div class="sv">Art carton 260–310 gsm, doff/glossy</div></div>
+    <div><div class="sk">Pemilik kartu</div><div class="sv">__NAMA__</div></div>
+    <div><div class="sk">No. kartu</div><div class="sv mono">__KODE__</div></div>
+  </div>
+
+  <div class="m-foot">
+    Halaman ini adalah <b>master file cetak fisik</b> dokumen __DOCNO__ · diterbitkan SIKEDA — __ORG__<br>
+    Verifikasi keaslian: __VERIF_URL__
+  </div>
+</div>
+
+</body>
+</html>

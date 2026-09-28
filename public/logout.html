@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sampai jumpa — SIKEDA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/sikeda.css">
+<style>
+  html,body{height:100%;}
+  body.bye-body{
+    margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+    background:
+      radial-gradient(1100px 500px at 85% -10%, rgba(201,162,39,.16), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(201,162,39,.10), transparent 55%),
+      linear-gradient(160deg,#0b1526 0%, #101d33 55%, #0b1526 100%);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    padding:24px;overflow-x:hidden;
+  }
+  .bye-wrap{width:100%;max-width:480px;text-align:center;animation:byeIn .45s ease both;}
+  @keyframes byeIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+  .bye-check{
+    width:76px;height:76px;margin:0 auto 20px;border-radius:50%;
+    background:linear-gradient(135deg,rgba(201,162,39,.22),rgba(201,162,39,.08));
+    border:1px solid rgba(201,162,39,.45);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .bye-check svg{color:#e7c14f;}
+  .bye-kicker{font-size:11px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#e7c14f;}
+  .bye-title{font-family:'Sora',sans-serif;font-size:30px;font-weight:800;margin:10px 0 8px;line-height:1.2;color:#fff;}
+  .bye-sub{font-size:14.5px;color:rgba(255,255,255,.72);margin:0 auto;max-width:400px;line-height:1.6;}
+  .bye-user{
+    display:inline-flex;align-items:center;gap:10px;margin:18px auto 0;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);
+    border-radius:999px;padding:7px 16px 7px 7px;
+  }
+  .bye-av{
+    width:32px;height:32px;border-radius:50%;flex:0 0 32px;
+    background:linear-gradient(135deg,#e7c14f,#c9a227);color:#101d33;
+    font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;
+  }
+  .bye-name{font-size:13.5px;font-weight:700;}
+  .bye-role{font-size:11.5px;color:rgba(255,255,255,.6);margin-left:2px;}
+  .bye-card{
+    margin:22px 0 0;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px 18px;
+    display:flex;align-items:center;gap:14px;text-align:left;
+  }
+  .bye-card .ic{
+    width:42px;height:42px;border-radius:12px;flex:0 0 42px;
+    background:rgba(201,162,39,.16);border:1px solid rgba(201,162,39,.35);
+    display:flex;align-items:center;justify-content:center;color:#e7c14f;
+  }
+  .bye-card .t{font-size:13.5px;font-weight:700;}
+  .bye-card .d{font-size:12.5px;color:rgba(255,255,255,.62);margin-top:2px;line-height:1.5;}
+  .bye-card .d.ok{color:#7ddc9a;font-weight:600;}
+  .bye-actions{display:flex;gap:12px;justify-content:center;margin-top:24px;flex-wrap:wrap;}
+  .bye-btn{
+    display:inline-flex;align-items:center;gap:8px;border-radius:12px;cursor:pointer;
+    padding:12px 22px;font-size:14px;font-weight:700;text-decoration:none;
+    transition:transform .15s,box-shadow .15s;border:1px solid transparent;
+  }
+  .bye-btn:hover{transform:translateY(-1px);}
+  .bye-btn-primary{background:#e7c14f;color:#101d33;box-shadow:0 8px 22px rgba(201,162,39,.28);}
+  .bye-btn-primary:hover{box-shadow:0 12px 28px rgba(201,162,39,.36);}
+  .bye-btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.28);}
+  .bye-btn-ghost:hover{background:rgba(255,255,255,.08);}
+  .bye-foot{margin-top:26px;font-size:11.5px;color:rgba(255,255,255,.42);}
+  @media (max-width:480px){
+    .bye-title{font-size:25px;}
+    .bye-card{text-align:left;}
+  }
+</style>
+</head>
+<body class="bye-body">
+<div class="bye-wrap">
+  <div class="bye-check">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="bye-kicker">Sesi berakhir dengan aman</div>
+  <h1 class="bye-title">Anda telah keluar.<br>Terima kasih!</h1>
+  <p class="bye-sub" id="byeSub">Sesi Anda sudah ditutup di perangkat ini. Data kartu digital tetap tersimpan aman di server SIKEDA.</p>
+  <div class="bye-user" id="byeUser" style="display:none;">
+    <span class="bye-av" id="byeAv">?</span>
+    <span><span class="bye-name" id="byeName"></span> <span class="bye-role" id="byeRole"></span></span>
+  </div>
+
+  <div class="bye-card">
+    <span class="ic">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="5.5" width="18" height="13" rx="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="8.5" cy="11" r="2" stroke="currentColor" stroke-width="1.6"/><path d="M5.8 16.2c.6-1.6 1.5-2.4 2.7-2.4s2.1.8 2.7 2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 9.5H19M14.5 13H19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </span>
+    <span>
+      <span class="t">Kartu digital Anda tetap aktif</span><br>
+      <span class="d" id="byeCardStatus">Memeriksa status kartu…</span>
+    </span>
+  </div>
+
+  <div class="bye-actions">
+    <a class="bye-btn bye-btn-primary" href="login.html">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Masuk lagi
+    </a>
+    <a class="bye-btn bye-btn-ghost" href="index.html">Ke beranda</a>
+  </div>
+
+  <div class="bye-foot">© <span id="byeYear"></span> <span data-ck="site.footer_brand">DPD Nusantara Bersatu — Kab. Tulungagung</span></div>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* Identitas dari sessionStorage (dipasang saat keluar dari dashboard) */
+  var info = null;
+  try { info = JSON.parse(sessionStorage.getItem('sikeda_bye') || 'null'); } catch(e){}
+  if(info && info.nama){
+    document.getElementById('byeUser').style.display = 'inline-flex';
+    var w = String(info.nama).trim().split(/\s+/);
+    document.getElementById('byeAv').textContent = (w[0].charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : '')).toUpperCase();
+    document.getElementById('byeName').textContent = info.nama;
+    var roleMap = { anggota: 'Anggota', admin: 'Admin', superadmin: 'Superadmin' };
+    document.getElementById('byeRole').textContent = '· ' + (roleMap[info.level] || info.level || '');
+    document.getElementById('byeSub').innerHTML = 'Sampai jumpa, <strong>' + String(info.nama).replace(/[&<>"]/g, '') + '</strong>! Sesi Anda sudah ditutup dengan aman di perangkat ini.';
+    try { sessionStorage.removeItem('sikeda_bye'); } catch(e){}
+  }
+
+  /* Status kartu: dibawa dari UI.logout (diambil selamat sesi masih valid) */
+  (function(){
+    var el = document.getElementById('byeCardStatus');
+    if(info && info.kode){
+      var st = String(info.status || '-');
+      el.innerHTML = 'Status <strong style="color:#7ddc9a;">' + st.replace(/[&<>"]/g, '') + '</strong> · ID <span class="mono">' + String(info.kode).replace(/[&<>"]/g, '') + '</span> — selalu siap di HP Anda.';
+    } else {
+      el.textContent = 'Data kartu tersimpan terenkripsi sesuai ketentuan yang berlaku.';
+    }
+  })();
+
+  document.getElementById('byeYear').textContent = new Date().getFullYear();
+
+  /* Konten dinamis (footer brand) */
+  fetch('/api/public/content').then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok || !j.data) return;
+    document.querySelectorAll('[data-ck]').forEach(function(el){
+      var v = j.data[el.getAttribute('data-ck')];
+      if(v) el.textContent = v;
+    });
+  }).catch(function(){});
+})();
+</script>
+</body>
+</html>
