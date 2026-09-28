@@ -4,7 +4,7 @@
   "private": true,
   "description": "SIKEDA — Vercel Serverless (API Express + static assets)",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "dependencies": {
     "express": "^4.19.2",
