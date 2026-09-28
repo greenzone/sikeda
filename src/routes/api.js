@@ -665,11 +665,11 @@ router.post('/members/:id/photo', requireRole('superadmin'), async (req, res) =>
     const { normalizePhoto } = require('../photo');
     const fs = require('fs');
     const path = require('path');
-    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
+    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
 
     const delOld = () => {
       if(a.foto_path){
-        const oldPath = path.join(__dirname, '..', '..', 'public', a.foto_path.replace(/^\/+/, ''));
+        const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', a.foto_path.replace(/^\/+/, ''));
         if(oldPath.startsWith(dir) && fs.existsSync(oldPath)){ try { fs.unlinkSync(oldPath); } catch(e){} }
       }
     };
@@ -892,13 +892,13 @@ router.post('/settings/logo', requireRole('superadmin'), async (req, res) => {
 
     const fs = require('fs');
     const path = require('path');
-    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
+    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
     fs.mkdirSync(dir, { recursive: true });
 
     /* Hapus berkas lama agar uploads tidak menumpuk */
     const prev = await q('SELECT nilai FROM settings WHERE kunci = ?', [key]);
     if(prev[0] && prev[0].nilai){
-      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
+      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', prev[0].nilai.replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
 
@@ -1264,13 +1264,13 @@ router.post('/content/image', requireRole('superadmin'), async (req, res) => {
 
     const fs = require('fs');
     const path = require('path');
-    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
+    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
     fs.mkdirSync(dir, { recursive: true });
 
     /* Hapus berkas lama agar uploads tidak menumpuk */
     const prev = await q('SELECT nilai FROM settings WHERE kunci = ?', [field.key]);
     if(prev[0] && prev[0].nilai){
-      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
+      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', prev[0].nilai.replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
 
@@ -1299,8 +1299,8 @@ router.delete('/content/image/:key', requireRole('superadmin'), async (req, res)
     if(prev[0] && prev[0].nilai){
       const fs = require('fs');
       const path = require('path');
-      const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
-      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
+      const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
+      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', prev[0].nilai.replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       await q('DELETE FROM settings WHERE kunci = ?', [field.key]);
     }
@@ -1440,11 +1440,11 @@ router.post('/me/photo', authRequired, requireRole('anggota'), async (req, res) 
     const { normalizePhoto } = require('../photo');
     const fs = require('fs');
     const path = require('path');
-    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
+    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
 
     const delOld = () => {
       if(a.foto_path){
-        const oldPath = path.join(__dirname, '..', '..', 'public', a.foto_path.replace(/^\/+/, ''));
+        const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', a.foto_path.replace(/^\/+/, ''));
         if(oldPath.startsWith(dir) && fs.existsSync(oldPath)){ try { fs.unlinkSync(oldPath); } catch(e){} }
       }
     };
@@ -1846,8 +1846,8 @@ router.delete('/kta-template', requireRole('superadmin'), async (req, res) => {
         ['front','back'].forEach(side => {
           const old = t[side] && t[side].bg_image;
           if(old && !used.has(String(old))){
-            const p = path.join(__dirname, '..', '..', 'public', String(old).replace(/^\/+/, ''));
-            if(p.startsWith(path.join(__dirname, '..', '..', 'public', 'uploads')) && fs.existsSync(p)) fs.unlinkSync(p);
+            const p = path.join(require('../uploads-path').uploadsRoot(), '..', String(old).replace(/^\/+/, ''));
+            if(p.startsWith(require('../uploads-path').uploadsRoot()) && fs.existsSync(p)) fs.unlinkSync(p);
           }
         });
       } catch(_) {}
@@ -1872,8 +1872,8 @@ router.delete('/kta-template/bg/:side', requireRole('superadmin'), async (req, r
       if(old){
         const used = await ktaBgUsedByPresets();
         const fs = require('fs');
-        const p = path.join(__dirname, '..', '..', 'public', String(old).replace(/^\/+/, ''));
-        if(!used.has(String(old)) && p.startsWith(path.join(__dirname, '..', '..', 'public', 'uploads')) && fs.existsSync(p)) fs.unlinkSync(p);
+        const p = path.join(require('../uploads-path').uploadsRoot(), '..', String(old).replace(/^\/+/, ''));
+        if(!used.has(String(old)) && p.startsWith(require('../uploads-path').uploadsRoot()) && fs.existsSync(p)) fs.unlinkSync(p);
       }
       t[side].bg_image = '';
       await q("UPDATE settings SET nilai = ? WHERE kunci = 'kta_template'", [JSON.stringify(t)]);
@@ -1894,13 +1894,13 @@ router.post('/kta-template/bg/:side', requireRole('superadmin'), async (req, res
     if(buf.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'Ukuran maksimal 5 MB.' });
     if(buf.length < 64) return res.status(400).json({ error: 'Berkas gambar tidak valid.' });
     const fs = require('fs');
-    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
+    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
     fs.mkdirSync(dir, { recursive: true });
     const rows = await q("SELECT nilai FROM settings WHERE kunci = 'kta_template' LIMIT 1");
     const t = rows[0] ? ktaNormalize(rows[0].nilai) : ktaNormalize(null);
     const prev = t[side] && t[side].bg_image;
     if(prev){
-      const oldPath = path.join(__dirname, '..', '..', 'public', String(prev).replace(/^\/+/, ''));
+      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', String(prev).replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
     const fname = 'kta-bg-' + side + '-' + Date.now() + '.' + ext;
@@ -2047,8 +2047,8 @@ router.put('/kta-presets/:id/activate', requireRole('superadmin'), async (req, r
         if(old && old !== now && !used.has(String(old))){
           try {
             const fs = require('fs');
-            const fp = path.join(__dirname, '..', '..', 'public', String(old).replace(/^\/+/, ''));
-            if(fp.startsWith(path.join(__dirname, '..', '..', 'public', 'uploads')) && fs.existsSync(fp)) fs.unlinkSync(fp);
+            const fp = path.join(require('../uploads-path').uploadsRoot(), '..', String(old).replace(/^\/+/, ''));
+            if(fp.startsWith(require('../uploads-path').uploadsRoot()) && fs.existsSync(fp)) fs.unlinkSync(fp);
           } catch(_) {}
         }
       });

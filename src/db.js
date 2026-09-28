@@ -11,10 +11,12 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'db_system_sikeda',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: process.env.VERCEL ? 4 : 10, /* serverless: hemat koneksi */
   queueLimit: 0,
   charset: 'utf8mb4_general_ci',
-  dateStrings: true /* DATE/DATETIME sebagai string 'YYYY-MM-DD' */
+  dateStrings: true, /* DATE/DATETIME sebagai string 'YYYY-MM-DD' */
+  enableKeepAlive: true, /* Vercel: hindari reconnect per request */
+  keepAliveInitialDelay: 10000
 });
 
 /* Helper: query dengan placeholder */

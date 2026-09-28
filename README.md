@@ -1,124 +1,123 @@
-# SIKEDA — Deploy ke Render.com
+# Panduan Deploy SIKEDA — Vercel (Serverless Functions)
 
-> **Apa yang jalan di mana:**
-> - **Aplikasi Node.js** → Render Web Service (folder ini)
-> - **MySQL** → tetap di **Hostinger** (`***REDACTED-DB-HOST***`) — Render tidak
->   menyediakan MySQL managed; pola sama dengan paket Cloudflare Workers
-> - **Foto/berkas unggahan** → Persistent Disk Render (via `UPLOADS_DIR`)
-> - **Cetak PDF kartu** → puppeteer + Chromium (jalan penuh, beda dari
->   Cloudflare Workers yang dibatasi kuota Browser Run)
+> Paket ini sudah diadaptasi ke model **serverless Vercel**: tidak ada
+> `server.js` yang menyala terus — API berupa fungsi, static assets
+> dilayani CDN Vercel, dan cetak PDF memakai Chromium khusus serverless.
+> Database tetap MySQL Hostinger remote (sama dengan paket Render/Hostinger).
 
 ---
 
-## Pilih jalur deploy
+## 1. Yang berubah dibanding versi Node biasa
 
-| | **Jalur A — Node native** (paling cepat) | **Jalur B — Docker** (paling andal untuk PDF) |
+| Aspek | Node (Hostinger/Render) | Vercel (paket ini) |
 |---|---|---|
-| Cara | New + → Web Service → connect repo | New + → Web Service → **Deploy an existing image** atau repo dengan Dockerfile |
-| Chromium | Diunduh puppeteer saat build (±150 MB, build lebih lama) | Sudah terpasang di image (`chromium` Debian) |
-| Risiko | Jarang: lib sistem kurang → PDF gagal | Nyaris nol |
-| Cocok untuk | Coba cepat / uji | Produksi |
+| Server | `server.js` listen terus | `api/index.js` — fungsi per request |
+| Static | express.static | **CDN Vercel** (otomatis dari `public/`) |
+| Rate limit & log file | in-memory / file | dihapus (instance ephemeral) |
+| Trust proxy | kondisional | selalu `true` |
+| Upload foto/gambar | `public/uploads` / `UPLOADS_DIR` | **`/tmp/sikeda-uploads`** (read-only FS) |
+| Koneksi MySQL | pool 10 | pool 4 + keep-alive (hemat koneksi) |
+| Cetak PDF | puppeteer + Chromium bundling | `api/cetak.js` + `@sparticuz/chromium` |
+| Migrasi tabel ringan | saat boot server | sekali per cold start (`app.js`) |
 
-Kedua jalur memakai **kode & env yang sama persis**.
+## 2. Struktur
 
----
-
-## 0. Sebelum mulai — siapkan 3 hal
-
-1. **Kode di GitHub/GitLab** — push folder ini ke repo (lihat catatan
-   keamanan di bawah sebelum push!).
-2. **Skema database** — impor `db/sikeda-schema.sql` ke MySQL Hostinger
-   lewat phpMyAdmin (database `***REDACTED-DB-NAME***`).
-3. **Akses remote MySQL** — pastikan user DB Hostinger boleh koneksi dari
-   luar (whitelist host `%` di panel Remote MySQL Hostinger bila ada).
-
-> ⚠️ **Sebelum push ke repo publik**: folder ini TIDAK berisi kredensial
-> (semua rahasia lewat env vars Render) — `.env` tidak ikut. Periksa lagi
-> dengan `git grep -lE "PASSWORD=|SECRET=" $(git rev-list --all)` — harus nihil
-> kecuali di `.env.example` (contoh nama kunci, tanpa password asli).
-> Riwayat Git sudah dibersihkan via `git filter-repo` (28 Sep 2026); nilai
-> kredensial diisi langsung di dashboard Render.
-
-## 1. Buat Web Service
-
-1. Login **dashboard.render.com** → **New + → Web Service**
-2. Connect repo GitHub/GitLab Anda → pilih repo
-3. Isi:
-   - **Name**: `sikeda`
-   - **Region**: `Singapore` (terdekat dari Indonesia)
-   - **Runtime**: `Node` (Jalur A) atau `Docker` (Jalur B)
-   - **Instance type**: minimal **Starter** ($7/mo) — Free tidak mendukung
-     Persistent Disk dan terlalu lambat untuk Chromium
-4. **Build command** (Jalur A): `npm ci --no-audit --no-fund`
-   — **Start command**: `npm start`
-   (Unduhan Chromium berjalan otomatis pada postinstall puppeteer;
-    Jalur B: Build/Start otomatis dari Dockerfile)
-5. **Advanced → Add Disk**:
-   - Name: `sikeda-uploads` · Mount path: `/var/data/uploads` · Size: 1 GB
-6. **Environment variables** (lihat `.env.example` untuk daftar lengkap):
-
-   | Key | Value |
-   |---|---|
-   | `DB_HOST` | `***REDACTED-DB-HOST***` |
-   | `DB_PORT` | `3306` |
-   | `DB_USER` | `***REDACTED-DB-USER***` |
-   | `DB_PASSWORD` | password DB Anda |
-   | `DB_NAME` | `***REDACTED-DB-NAME***` |
-   | `JWT_SECRET` | acak baru: `openssl rand -hex 32` |
-   | `JWT_EXPIRES` | `12h` |
-   | `NIK_ENC_KEY` | **sama persis** dengan `.env` versi lama — NIK lama tak terbaca bila beda |
-   | `APP_URL` | `https://sikeda.onrender.com` |
-   | `UPLOADS_DIR` | `/var/data/uploads` |
-   | `NODE_ENV` | `production` |
-
-   Atau pakai **Blueprint**: `render.yaml` di folder ini membuat layanan +
-   disk + env vars sekaligus (*New + → Blueprint*).
-
-7. **Create Web Service** → tunggu build ±3–8 menit (Jalur A mengunduh
-   Chromium saat `npm install`)
-
-## 2. Verifikasi
-
-```bash
-BASE=https://sikeda.onrender.com
-curl -s $BASE/health                          # {"ok":true,...} ← server hidup
-curl -s -o /dev/null -w "%{http_code}\n" $BASE/index.html        # 200
-curl -s -o /dev/null -w "%{http_code}\n" $BASE/api/public/stats  # 200 ← DB tersambung
+```
+deploy-vercel/
+├── api/
+│   ├── index.js        ← SEMUA /api/*, /kta/*, /share-card/*, /qrcode/*
+│   ├── cetak.js        ← PDF kartu (fungsi besar: 3008 MB, 300 s)
+│   └── proxy.js        ← static fallback + /uploads (clean URL, 404)
+├── app.js              ← Express app (dipakai kedua fungsi di atas)
+├── src/                ← kode aplikasi (patch serverless di uploads-path/db/photo)
+├── public/             ← frontend (dilayani CDN Vercel)
+├── db/sikeda-schema.sql← skema database
+├── scripts/create-superadmin.js
+├── vercel.json         ← routing + konfigurasi fungsi
+├── test-server.js      ← uji lokal (simulasi routing Vercel)
+└── .env.example        ← daftar env vars
 ```
 
-Lalu di browser:
-1. Login superadmin → dashboard terbuka (DB jalan)
-2. Daftar Anggota → foto tampil (Persistent Disk jalan)
-3. vCard → **Cetak PDF** → file PDF terunduh (Chromium jalan)
-4. Kirim kartu via WhatsApp/Telegram/Email → masuk (gateway jalan)
+## 3. Langkah deploy
 
-## 3. Superadmin pertama
-
-Render Dashboard → Web Service `sikeda` → tab **Shell**:
-
+### 3.1 Database (sekali)
+Impor `db/sikeda-schema.sql` via phpMyAdmin Hostinger bila database
+belum berisi. Lalu buat superadmin:
 ```bash
-node scripts/create-superadmin.js
+cd deploy-vercel
+node scripts/create-superadmin.js   # butuh .env lokal sementara
 ```
 
-(ikuti prompt username/password/email — database harus sudah terisi skema)
+### 3.2 Push ke Git
+```bash
+cd deploy-vercel
+git init -b main
+git add -A
+git commit -m "SIKEDA — paket deploy Vercel"
+git remote add origin git@gitlab.com:USERNAME/sikeda-vercel.git
+git push -u origin main
+```
+> Jangan commit `.env` — sudah ada di `.gitignore`. Kredensial masuk lewat dashboard Vercel.
 
-## 4. Update & operasional
+### 3.3 Buat project di Vercel
+1. **vercel.com → Add New → Project** → import repo
+2. Framework Preset: **Other** — biarkan Vercel membaca `vercel.json`
+3. Root Directory: kosong (root repo)
+4. **Environment Variables** (Production + Preview) — salin dari `.env.example`:
 
-- **Deploy ulang**: `git push` → Render auto-deploy (`autoDeploy: true`)
-- **Rollback**: dashboard → Events → pilih versi lama → Rollback
-- **Log real-time**: tab **Logs**
-- **Domain kustom**: Settings → Custom Domains → tambahkan → update
-  env var `APP_URL` → deploy ulang (APP_URL dipakai QR & lampiran WA)
-- **Sleep mode**: Web Service Free tidur setelah 15 menit idle — Starter
-  tidak tidur. Jangan pakai Free untuk produksi.
-- **Backup DB**: dump rutin dari phpMyAdmin Hostinger.
+   | Kunci | Nilai | Catatan |
+   |---|---|---|
+   | `DB_HOST` | host MySQL Anda | Hostinger |
+   | `DB_PORT` | `3306` | |
+   | `DB_USER` / `DB_PASSWORD` / `DB_NAME` | kredensial DB | |
+   | `JWT_SECRET` | string acak | bebas baru |
+   | `NIK_ENC_KEY` | 64 hex | **harus sama persis** dgn env lama |
+   | `APP_URL` | `https://<project>.vercel.app` | isi setelah tahu URL |
+   | `CORS_ORIGINS` | kosong | frontend & API satu origin |
 
-## Catatan khusus Render
+5. **Deploy** → tunggu build (~1 menit)
 
-- **Cold start** build pertama lebih lama karena unduhan Chromium (Jalur A);
-  Jalur B (Docker) build lebih cepat setelah image tersimpan.
-- **Persistent Disk** hanya bisa dirakit di region yang sama dengan service —
-  keduanya `singapore` di render.yaml.
-- Jika suatu saat ingin memindahkan DB ke managed PostgreSQL Render,
-  itu = migrasi skema + kode (mysql2 → pg) — tidak perlu selama MySQL
-  Hostinger sehat.
+### 3.4 Setelah live — verifikasi
+```bash
+B=https://<project>.vercel.app
+curl -s $B/api/public/health            # {"ok":true,...}
+curl -s $B/api/public/branding          # branding JSON
+curl -sfI $B/index.html | head -1       # 200
+curl -sfI $B/dashboard | head -1        # 200 (clean URL)
+```
+Lalu uji dari browser: login dashboard (OTP/demo), buka kartu digital,
+**cetak PDF** (butuh Chromium serverless — panggilan pertama ~10-20 dtk),
+upload foto profil.
+
+### 3.5 Custom domain (opsional)
+Vercel → Project → Settings → Domains → tambah domain → sesuaikan DNS →
+perbarui env `APP_URL` → redeploy.
+
+## 4. Keterbatasan & catatan penting
+
+1. **Filesystem read-only** — foto/gambar unggahan tersimpan di `/tmp`,
+   bertahan selama instance hidup, **hilang saat cold start baru**. Untuk
+   produksi serius, sambungkan **Vercel Blob** (lihat `src/uploads-path.js`
+   sebagai titik integrasi tunggal — semua tulisan upload lewat modul ini).
+2. **Cetak PDF** — jalan penuh via `api/cetak.js` (3008 MB / 300 dtk).
+   Plan **Hobby** dibatasi 60 dtk & 1024 MB — jika timeout, upgrade Pro
+   atau biarkan cetak dari paket Render/Hostinger.
+3. **Koneksi MySQL** — setiap instance cold start membuka pool baru.
+   Hostinger remote MySQL mendukung, tapi pantau `Max_connections`.
+4. **Warm-up** — request pertama tiap fungsi lambat (cold start). Normal.
+5. **`JWT_SECRET`/`NIK_ENC_KEY`** — `NIK_ENC_KEY` HARUS sama dengan
+   platform lain agar NIK terenkripsi tetap terbaca.
+
+## 5. Uji lokal (opsional)
+
+```bash
+cd deploy-vercel
+cp .env.example .env   # isi nilai asli
+npm install            # (butuh mysql2, express, dst.)
+node test-server.js 4588
+# lalu: curl http://localhost:4588/api/public/health
+```
+
+## 6. Rollback
+
+Vercel Dashboard → Deployments → pilih versi lama → **Instant Rollback**.

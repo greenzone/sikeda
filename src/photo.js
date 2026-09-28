@@ -12,17 +12,12 @@
    ============================================================ */
 'use strict';
 
-/* CATATAN PRODUKSI: puppeteer dimuat lazy. Paket produksi tidak menyertakan
-   puppeteer — normalisasi foto memakai sharp bila terpasang; tanpa keduanya
-   foto disimpan apa adanya (tanpa crop). Pasang `npm install sharp` untuk
-   kualitas terbaik, atau puppeteer bila fitur PDF juga diaktifkan. */
-let _puppeteer;
-function getPuppeteer(){
-  if(_puppeteer !== undefined) return _puppeteer;
-  try { _puppeteer = require('puppeteer'); }
-  catch(_){ _puppeteer = null; }
-  return _puppeteer;
-}
+/* Vercel: puppeteer penuh tidak dipasang (hanya puppeteer-core +
+   @sparticuz/chromium untuk cetak). Fallback canvas tetap bisa jalan
+   bila puppeteer-core tersedia; kalau tidak, lempar error jelas. */
+let puppeteer = null;
+try { puppeteer = require('puppeteer'); }
+catch(_) { try { puppeteer = require('puppeteer-core'); } catch(_e){ puppeteer = null; } }
 
 const CARD_W = 720;  /* px ekspor — slot 24cqw @ kartu 300dpi ≈ 283px, ini 2.5× (aman) */
 const CARD_H = 960;
@@ -66,16 +61,17 @@ let canvasBusy = Promise.resolve();
 
 async function getCanvasPage() {
   if (canvasPage) return canvasPage;
-  const _Pup = getPuppeteer();
-  if (!_Pup) {
-    const err = new Error('Normalisasi foto via canvas tidak tersedia (puppeteer tidak terpasang). Foto tetap disimpan tanpa crop bila sharp juga tidak ada.');
-    err.status = 503;
-    throw err;
-  }
-  canvasBrowser = await _Pup.launch({
+  if(!puppeteer) throw new Error('Normalisasi foto butuh sharp (tidak terpasang) atau Chromium (puppeteer) — tidak tersedia di lingkungan ini.');
+  const launchOpts = {
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-  });
+  };
+  try {
+    const chromium = require('@sparticuz/chromium');
+    launchOpts.executablePath = await chromium.executablePath();
+    launchOpts.headless = true;
+  } catch(_) { /* bukan serverless: pakai default */ }
+  canvasBrowser = await puppeteer.launch(launchOpts);
   canvasPage = await canvasBrowser.newPage();
   await canvasPage.setContent('<canvas id="c"></canvas>');
   return canvasPage;
@@ -144,18 +140,16 @@ async function normalizePhoto(buf, contentType) {
       console.warn('photo: sharp gagal, fallback canvas:', e.message);
     }
   }
-  /* Tanpa sharp: coba jalur canvas (puppeteer) bila tersedia */
-  if (getPuppeteer()) {
-    /* serialisasi antar permintaan agar halaman canvas tidak dipakai bersamaan */
-    const run = async () => ({ buffer: await normalizeWithCanvas(buf, contentType), ext: 'jpg' });
-    const prev = canvasBusy;
-    canvasBusy = prev.then(run, run);
-    return canvasBusy;
+  /* Guard: tanpa sharp & tanpa Chromium (mis. Vercel tanpa foto-render)
+     jangan menggantung — gagal cepat dengan pesan jelas. */
+  if (!puppeteer) {
+    throw new Error('Normalisasi foto tidak tersedia: pasang paket "sharp" atau sediakan Chromium (puppeteer).');
   }
-  /* Tidak ada sharp maupun puppeteer: simpan foto apa adanya */
-  console.warn('photo: sharp & puppeteer tidak tersedia — foto disimpan tanpa normalisasi (pasang `sharp` untuk hasil terbaik).');
-  const ext = String(contentType || '').toLowerCase().includes('png') ? 'png' : 'jpg';
-  return { buffer: buf, ext };
+  /* serialisasi antar permintaan agar halaman canvas tidak dipakai bersamaan */
+  const run = async () => ({ buffer: await normalizeWithCanvas(buf, contentType), ext: 'jpg' });
+  const prev = canvasBusy;
+  canvasBusy = prev.then(run, run);
+  return canvasBusy;
 }
 
 module.exports = { normalizePhoto, CARD_W, CARD_H, CARD_RATIO };

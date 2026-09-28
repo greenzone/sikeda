@@ -1,23 +1,20 @@
 {
-  "name": "sikeda-system-production",
+  "name": "sikeda-vercel",
   "version": "1.0.0",
-  "description": "SIKEDA — paket deploy Render.com",
-  "main": "server.js",
   "private": true,
-  "scripts": {
-    "start": "node server.js"
-  },
+  "description": "SIKEDA — Vercel Serverless (API Express + static assets)",
   "engines": {
-    "node": "20.x || 22.x || 24.x"
+    "node": "20.x"
   },
   "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.11.0",
-    "nodemailer": "^10.0.9",
-    "puppeteer": "^24.0.0",
-    "qrcode": "^1.5.4"
+    "nodemailer": "^6.9.13",
+    "qrcode": "^1.5.4",
+    "puppeteer-core": "^24.0.0",
+    "@sparticuz/chromium": "^133.0.0"
   }
 }

@@ -7,16 +7,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-/* CATATAN PRODUKSI: puppeteer dimuat lazy — paket produksi tidak menyertakan
-   puppeteer/Chromium. Bila fitur cetak PDF diinginkan di VPS, jalankan
-   `npm install puppeteer` dan modul ini otomatis memakainya. */
-let _puppeteer;
-function getPuppeteer(){
-  if(_puppeteer !== undefined) return _puppeteer;
-  try { _puppeteer = require('puppeteer'); }
-  catch(_){ _puppeteer = null; }
-  return _puppeteer;
-}
+const puppeteer = require('puppeteer');
 const { q } = require('../db');
 const { baseUrl } = require('../baseurl');
 
@@ -416,13 +407,7 @@ async function buildPdfBuffer(kode, req) {
     titleBack: (tpl && tpl.back && tpl.back.header_text) || '',
   });
 
-  const _Pup = getPuppeteer();
-  if (!_Pup) {
-    const err = new Error('Fitur cetak PDF tidak tersedia di lingkungan ini (puppeteer/Chromium belum terpasang). Fitur lain tetap berfungsi normal.');
-    err.status = 503;
-    throw err;
-  }
-  const browser = await _Pup.launch({
+  const browser = await puppeteer.launch({
     headless: 'new',
     args: [
       '--no-sandbox',
@@ -474,13 +459,7 @@ async function buildPdfBuffer(kode, req) {
     frontImg, backImg,
   });
 
-  const _Pup2 = getPuppeteer();
-  if (!_Pup2) {
-    const err = new Error('Fitur gambar PNG kartu tidak tersedia di lingkungan ini (puppeteer/Chromium belum terpasang).');
-    err.status = 503;
-    throw err;
-  }
-  const browser2 = await _Pup2.launch({
+  const browser2 = await puppeteer.launch({
     headless: 'new',
     args: [
       '--no-sandbox',
@@ -591,13 +570,7 @@ async function buildPngBuffer(kode, req) {
     titleBack: (tpl && tpl.back && tpl.back.header_text) || '',
   });
 
-  const _Pup = getPuppeteer();
-  if (!_Pup) {
-    const err = new Error('Fitur cetak PDF tidak tersedia di lingkungan ini (puppeteer/Chromium belum terpasang). Fitur lain tetap berfungsi normal.');
-    err.status = 503;
-    throw err;
-  }
-  const browser = await _Pup.launch({
+  const browser = await puppeteer.launch({
     headless: 'new',
     args: [
       '--no-sandbox',
