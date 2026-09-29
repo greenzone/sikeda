@@ -30,6 +30,15 @@ router.get('/branding', async (req, res) => {
 /* GET /api/health — probe sederhana */
 router.get('/health', (req, res) => res.json({ ok: true, uptime: Math.round(process.uptime()) }));
 
+/* GET /api/public/busy-status — status antrian untuk halaman busy.html & poller klien.
+   Ringan: tidak menyentuh DB (hanya counter memori proses ini). */
+router.get('/busy-status', (req, res) => {
+  try {
+    const s = require('../busy').snapshot();
+    res.json({ ok: true, data: { state: s.state, busy: s.busy, mode: s.mode, inflight: s.inflight, lagMs: s.lagMs, releaseSecs: s.releaseSecs } });
+  } catch(e){ res.json({ ok: true, data: { state: 'normal', busy: false, mode: 'off' } }); }
+});
+
 /* GET /api/public/content — seluruh konten halaman depan & login (publik, tanpa auth).
    Dipakai index.html & login.html untuk merender teks/aset dinamis. */
 router.get('/content', async (req, res) => {

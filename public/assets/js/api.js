@@ -38,6 +38,13 @@
       var msg = (json && json.error) || ('HTTP ' + res.status);
       var err = new Error(msg);
       err.status = res.status;
+      /* Server sibuk → halaman antrian (auto-retry sampai normal) */
+      if(res.status === 503 && json && json.busy){
+        if(!opts.noRedirect){
+          window.location.href = json.retry || '/busy.html?ret=' + encodeURIComponent(window.location.pathname + window.location.search);
+        }
+        throw err;
+      }
       /* Sesi habis → bersihkan & lempar ke login */
       if(res.status === 401 && !opts.noRedirect && window.location.pathname.indexOf('login') === -1){
         SIKAPI.clearSession();

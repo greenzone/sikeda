@@ -12,6 +12,11 @@ app.disable('x-powered-by');
 app.set('trust proxy', true); /* selalu di balik proxy Vercel */
 app.use(express.json({ limit: '2mb' }));
 
+/* ---------- Deteksi beban & halaman antrian ----------
+   Per-instance (serverless): hanya signal lag & concurrency instance ini.
+   Default normal — aktif saat melewati ambang atau dipaksa superadmin. */
+app.use(require('./src/busy').middleware);
+
 /* ---------- Security headers ---------- */
 app.use((req, res, next) => {
   res.header('X-Content-Type-Options', 'nosniff');
