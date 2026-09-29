@@ -2174,5 +2174,46 @@ router.post('/storage/test', requireRole('superadmin'), async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message || 'Uji penyimpanan gagal.' }); }
 });
 
+/* ============================================================
+   Beban sistem & antrian (busy queue)
+   GET /api/busy  → status: mode, beban saat ini, ambang
+   PUT /api/busy  → superadmin: mode, manual on/off, ambang, hold & release
+   ============================================================ */
+const busyMod = require('../busy');
+
+router.get('/busy', requireRole('admin','superadmin'), async (req, res) => {
+  try {
+    const s = busyMod.snapshot();
+    s.canEdit = req.user.level === 'superadmin';
+    res.json({ ok: true, data: s });
+  } catch(e){ res.status(500).json({ error: 'Gagal membaca status beban.' }); }
+});
+
+router.put('/busy', requireRole('superadmin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if(b.mode !== undefined){
+      const m = String(b.mode).trim().toLowerCase();
+      if(!['auto','manual','off'].includes(m)) return res.status(400).json({ error: 'Mode harus auto, manual, atau off.' });
+      await q(`INSERT INTO settings (kunci, nilai) VALUES ('busy_mode',?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, [m]);
+    }
+    if(b.manualOn !== undefined){
+      const v = (b.manualOn === true || b.manualOn === 1 || b.manualOn === '1') ? '1' : '0';
+      await q(`INSERT INTO settings (kunci, nilai) VALUES ('busy_manual_on',?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, [v]);
+    }
+    const intKeys = [['maxConc','busy_max_conc',1,100000],['maxLagMs','busy_max_lag_ms',20,60000],['holdSecs','busy_hold_secs',1,300],['releaseSecs','busy_release_secs',5,600]];
+    for(const [prop, key, min, max] of intKeys){
+      if(b[prop] !== undefined && b[prop] !== ''){
+        const n = parseInt(b[prop], 10);
+        if(isNaN(n) || n < min || n > max) return res.status(400).json({ error: 'Nilai ' + prop + ' harus angka ' + min + '-' + max + '.' });
+        await q(`INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, [key, String(n)]);
+      }
+    }
+    await busyMod.refreshCfg();
+    await logAct(req.user, 'Ubah pengaturan beban sistem', JSON.stringify(b).slice(0, 180));
+    res.json({ ok: true, data: busyMod.snapshot() });
+  } catch(e){ res.status(500).json({ error: 'Gagal menyimpan pengaturan beban.' }); }
+});
+
 module.exports = router;
 module.exports.SITE_DEFAULTS = SITE_DEFAULTS;
