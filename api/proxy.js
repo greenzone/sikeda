@@ -32,7 +32,17 @@ module.exports = async (req, res) => {
 
     /* /uploads/* → dari disk persisten (/tmp via UPLOADS_DIR) */
     if(p.startsWith('/uploads/')){
-      const f = resolveUpload(p.replace(/^\/+/, ''));
+      const relUpl = p.replace(/^\/+/, '');
+      /* Driver remote aktif → redirect ke URL publik (CDN/Cloudinary/Supabase) */
+      try {
+        const storage = require('../src/storage');
+        const d = await storage.driver();
+        if(d !== 'local'){
+          const u = await storage.publicUrl(relUpl);
+          if(u){ res.statusCode = 302; res.setHeader('Location', u); return; }
+        }
+      } catch(_){ /* driver bermasalah → fallback disk lokal */ }
+      const f = resolveUpload(relUpl);
       if(!f){
         res.statusCode = 404;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');

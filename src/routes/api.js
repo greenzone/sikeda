@@ -8,6 +8,7 @@ const { encryptNIK, decryptNIK, maskNIK } = require('../crypto');
 const { authRequired, requireRole } = require('../middleware');
 const { baseUrl } = require('../baseurl');
 const { broadcastPendaftaran, notifStatus } = require('../notify');
+const storage = require('../storage');
 
 const router = express.Router();
 
@@ -702,6 +703,8 @@ router.post('/members/:id/photo', requireRole('superadmin'), async (req, res) =>
     delOld();
     const fname = 'photo-' + a.id + '-' + Date.now() + '.' + ext;
     fs.writeFileSync(path.join(dir, fname), buf);
+    /* Mirror opsional ke penyimpanan remote (CDN/Cloudinary/Supabase/Drive) — best effort */
+    storage.writeFile('uploads/' + fname, buf).catch(function(){});
     const rel = 'uploads/' + fname;
     await q('UPDATE anggota SET foto_path = ? WHERE id = ?', [rel, a.id]);
     await logAct(req.user, 'Upload foto anggota', a.kode_unik + ' → ' + rel + ' (720×960)');
@@ -904,6 +907,8 @@ router.post('/settings/logo', requireRole('superadmin'), async (req, res) => {
 
     const fname = 'logo-' + kind + '-' + Date.now() + '.' + ext;
     fs.writeFileSync(path.join(dir, fname), buf);
+    /* Mirror opsional ke penyimpanan remote (CDN/Cloudinary/Supabase/Drive) — best effort */
+    storage.writeFile('uploads/' + fname, buf).catch(function(){});
     const rel = 'uploads/' + fname;
     await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)',
       [key, rel]);
@@ -1276,6 +1281,8 @@ router.post('/content/image', requireRole('superadmin'), async (req, res) => {
 
     const fname = 'site-' + field.key.replace('site.', '').replace(/_/g, '-') + '-' + Date.now() + '.' + ext;
     fs.writeFileSync(path.join(dir, fname), buf);
+    /* Mirror opsional ke penyimpanan remote (CDN/Cloudinary/Supabase/Drive) — best effort */
+    storage.writeFile('uploads/' + fname, buf).catch(function(){});
     const rel = 'uploads/' + fname;
     await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)',
       [field.key, rel]);
@@ -1477,6 +1484,8 @@ router.post('/me/photo', authRequired, requireRole('anggota'), async (req, res) 
     delOld();
     const fname = 'photo-' + a.id + '-' + Date.now() + '.' + ext;
     fs.writeFileSync(path.join(dir, fname), buf);
+    /* Mirror opsional ke penyimpanan remote (CDN/Cloudinary/Supabase/Drive) — best effort */
+    storage.writeFile('uploads/' + fname, buf).catch(function(){});
     const rel = 'uploads/' + fname;
     await q('UPDATE anggota SET foto_path = ? WHERE id = ?', [rel, a.id]);
     await logAct(req.user, 'Upload foto profil', a.kode_unik + ' → ' + rel + ' (720×960)');
@@ -1905,6 +1914,8 @@ router.post('/kta-template/bg/:side', requireRole('superadmin'), async (req, res
     }
     const fname = 'kta-bg-' + side + '-' + Date.now() + '.' + ext;
     fs.writeFileSync(path.join(dir, fname), buf);
+    /* Mirror opsional ke penyimpanan remote (CDN/Cloudinary/Supabase/Drive) — best effort */
+    storage.writeFile('uploads/' + fname, buf).catch(function(){});
     t[side].bg_image = 'uploads/' + fname;
     await q("INSERT INTO settings (kunci, nilai) VALUES ('kta_template', ?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)", [JSON.stringify(t)]);
     await logAct(req.user, 'Unggah latar kartu fisik', side);
@@ -2109,6 +2120,58 @@ router.delete('/kta-presets/:id', requireRole('superadmin'), async (req, res) =>
     await logAct(req.user, 'Hapus preset desain kartu', gone.nama);
     res.json({ ok: true, list: p.list, active: p.active });
   } catch(e){ res.status(500).json({ error: 'Gagal menghapus preset.' }); }
+});
+
+/* ============================================================
+   Penyimpanan uploads — multi-driver (lokal + mirror remote gratis)
+   GET  /api/storage       → status driver aktif & kesiapan env
+   PUT  /api/storage       → superadmin: pilih driver + CDN base
+   POST /api/storage/test  → superadmin: uji tulis+hapus berkas uji
+   ============================================================ */
+router.get('/storage', requireRole('admin','superadmin'), async (req, res) => {
+  try {
+    const envReady = {
+      cloudinary: !!(process.env.CLOUDINARY_CLOUD && process.env.CLOUDINARY_KEY && process.env.CLOUDINARY_SECRET),
+      supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
+      gdrive: !!(process.env.GDRIVE_CLIENT_ID && process.env.GDRIVE_CLIENT_SECRET && process.env.GDRIVE_REFRESH_TOKEN)
+    };
+    res.json({ ok: true, data: {
+      driver: await storage.driver(),
+      cdnBase: await storage.cdnBase(),
+      envReady,
+      canEdit: req.user.level === 'superadmin'
+    } });
+  } catch(e){ res.status(500).json({ error: 'Gagal membaca konfigurasi penyimpanan.' }); }
+});
+
+router.put('/storage', requireRole('superadmin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const d = String(b.driver || '').trim().toLowerCase();
+    if(!storage.DRIVERS.includes(d)) return res.status(400).json({ error: 'Driver tidak dikenal.' });
+    const baseIn = String(b.cdnBase || '').trim();
+    if(baseIn && !/^https:\/\//.test(baseIn)) return res.status(400).json({ error: 'CDN base harus URL https:// .' });
+    await q(`INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, ['storage_driver', d]);
+    await q(`INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, ['storage_cdn_base', baseIn.slice(0, 200)]);
+    storage.setDriver(d); storage.setCdnBase(baseIn);
+    await logAct(req.user, 'Ubah penyimpanan uploads', 'driver=' + d);
+    res.json({ ok: true, driver: d });
+  } catch(e){ res.status(500).json({ error: 'Gagal menyimpan konfigurasi penyimpanan.' }); }
+});
+
+router.post('/storage/test', requireRole('superadmin'), async (req, res) => {
+  try {
+    const d = await storage.driver();
+    const rel = 'uploads/storage-test-' + Date.now() + '.txt';
+    const buf = Buffer.from('SIKEDA storage test ' + new Date().toISOString(), 'utf8');
+    const r = await storage.writeFile(rel, buf);
+    await storage.removeFile(rel);
+    const remoteOk = (d === 'local' || d === 'cdn') ? null : !!r.ok;
+    const msg = (d === 'local' || d === 'cdn')
+      ? 'Penyimpanan lokal OK' + (d === 'cdn' ? ' (CDN base dipakai untuk membaca).' : '.')
+      : (remoteOk ? 'Lokal + mirror ' + d + ' OK — berkas uji tersimpan & dihapus.' : 'Lokal OK; mirror ' + d + ' GAGAL — periksa env kredensial/kuota.');
+    res.json({ ok: true, driver: d, remoteOk, message: msg });
+  } catch(e){ res.status(500).json({ error: e.message || 'Uji penyimpanan gagal.' }); }
 });
 
 module.exports = router;

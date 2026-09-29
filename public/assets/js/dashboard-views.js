@@ -2639,8 +2639,37 @@
         + (s.hero_bg && canEdit ? '<button class="btn btn-soft btn-sm" id="heroDel" style="color:var(--danger);">Hapus (pakai fallback)</button>' : '')
         + '</div></div></div>';
 
+      /* ---------- Kartu penyimpanan uploads (multi-driver) ---------- */
+      var stRes = null;
+      try { stRes = await SIKAPI.get('/storage'); } catch(_){}
+      var st = (stRes && stRes.data) || { driver: 'local', cdnBase: '', envReady: {} };
+      var stEnvNames = { cloudinary: 'CLOUDINARY_CLOUD/KEY/SECRET', supabase: 'SUPABASE_URL/SERVICE_KEY', gdrive: 'GDRIVE_CLIENT_ID/SECRET/REFRESH_TOKEN' };
+      var stEnvTxt = Object.keys(stEnvNames).map(function(k){ return k + ': ' + ((st.envReady || {})[k] ? '✓ siap' : '— env belum diisi (' + stEnvNames[k] + ')'); }).join(' · ');
+      var storageCard =
+        '<div class="card card-pad" style="margin-bottom:16px;">'
+        + '<h3 class="display-s">Penyimpanan file uploads</h3>'
+        + '<p class="small muted mt-8">Folder server bawaan selalu aktif sebagai fallback — instalasi pertama tanpa konfigurasi tetap berjalan normal. Driver remote mengarahkan pembacaan (redirect ke CDN) dan menyalin file baru ke layanan penyimpanan gratis. Kredensial diisi lewat environment variables, bukan di sini.</p>'
+        + '<div class="grid-2 mt-16">'
+        + '<div class="field"><label>Driver penyimpanan</label>'
+        + '<div class="input-shell"><select id="stStorage" ' + (canEdit ? '' : 'disabled') + '>'
+        + '<option value="local"' + (st.driver === 'local' ? ' selected' : '') + '>Lokal — server bawaan (default)</option>'
+        + '<option value="cdn"' + (st.driver === 'cdn' ? ' selected' : '') + '>CDN kustom — file tetap di server</option>'
+        + '<option value="cloudinary"' + (st.driver === 'cloudinary' ? ' selected' : '') + '>Cloudinary — 25 GB gratis</option>'
+        + '<option value="supabase"' + (st.driver === 'supabase' ? ' selected' : '') + '>Supabase Storage — 1 GB gratis</option>'
+        + '<option value="gdrive"' + (st.driver === 'gdrive' ? ' selected' : '') + '>Google Drive — 15 GB gratis</option>'
+        + '</select></div></div>'
+        + '<div class="field" id="stCdnWrap" style="display:' + (st.driver === 'cdn' || st.driver === 'gdrive' ? 'block' : 'none') + ';"><label>CDN base URL (https://…)</label>'
+        + '<div class="input-shell"><input id="stCdnBase" placeholder="https://cdn.contoh.com" value="' + esc(st.cdnBase || '') + '" ' + (canEdit ? '' : 'disabled') + '></div>'
+        + '<span class="hint">Dipakai driver CDN kustom &amp; Google Drive untuk membentuk URL publik berkas.</span></div>'
+        + '</div>'
+        + '<p class="hint">Kesiapan kredensial env — ' + esc(stEnvTxt) + '</p>'
+        + (canEdit ? '<div class="row gap-12 mt-12"><button class="btn btn-primary btn-sm" id="stStorageSave">Simpan Penyimpanan</button><button class="btn btn-soft btn-sm" id="stStorageTest">Uji Simpan &amp; Baca</button></div>' : '')
+        + (!stRes ? '<p class="hint mt-8">Backend belum mendukung modul penyimpanan — perbarui server ke versi terbaru.</p>' : '')
+        + '</div>';
+
       host.innerHTML = stickyBar
         + heroCard
+        + storageCard
         + '<div class="grid-2">'
         + '<div class="stack gap-16">'
         + '<div class="card card-pad">'
@@ -2883,6 +2912,33 @@
         var bgVal = s.hero_bg || 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=60';
         p.style.backgroundImage = 'url("' + bgVal + '")';
       })();
+
+      /* ---------- Penyimpanan uploads: driver, uji, simpan ---------- */
+      var stSel = document.getElementById('stStorage');
+      if(stSel){
+        var stWrap = document.getElementById('stCdnWrap');
+        stSel.onchange = function(){ if(stWrap) stWrap.style.display = (stSel.value === 'cdn' || stSel.value === 'gdrive') ? 'block' : 'none'; };
+      }
+      var stSave2 = document.getElementById('stStorageSave');
+      if(stSave2){
+        stSave2.onclick = async function(){
+          try {
+            await SIKAPI.put('/storage', { driver: document.getElementById('stStorage').value, cdnBase: (document.getElementById('stCdnBase') || {}).value || '' });
+            showToast('Konfigurasi penyimpanan disimpan.', 'success');
+          } catch(e){ showToast(e.message, 'danger'); }
+        };
+      }
+      var stTestBtn = document.getElementById('stStorageTest');
+      if(stTestBtn){
+        stTestBtn.onclick = async function(){
+          stTestBtn.disabled = true;
+          try {
+            var r = await SIKAPI.post('/storage/test', {});
+            showToast(r.message || ('Driver aktif: ' + (r.driver || '?')), r.remoteOk === false ? 'danger' : 'success');
+          } catch(e){ showToast(e.message, 'danger'); }
+          stTestBtn.disabled = false;
+        };
+      }
 
       /* Favicon upload */
       var favFi = document.getElementById('favFile');
