@@ -7,7 +7,22 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const puppeteer = require('puppeteer');
+/* Vercel: puppeteer penuh tidak terpasang (hanya puppeteer-core +
+   @sparticuz/chromium untuk api/cetak.js). Loader lazy + toleran —
+   require() keras di level modul membuat seluruh app gagal boot
+   (Cannot find module 'puppeteer') di serverless. */
+let _puppeteer;
+function getPuppeteer(){
+  if(_puppeteer !== undefined) return _puppeteer;
+  try { _puppeteer = require('puppeteer'); }
+  catch(_){ try { _puppeteer = require('puppeteer-core'); } catch(_e){ _puppeteer = null; } }
+  return _puppeteer;
+}
+const puppeteer = { launch: async (opts) => {
+  const P = getPuppeteer();
+  if(!P){ const err = new Error('Chromium tidak tersedia (puppeteer/puppeteer-core tidak terpasang).'); err.status = 503; throw err; }
+  return P.launch(opts);
+}};
 const { q } = require('../db');
 const { baseUrl } = require('../baseurl');
 
