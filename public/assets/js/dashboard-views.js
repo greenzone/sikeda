@@ -2642,11 +2642,14 @@
       /* ---------- Kartu beban sistem & antrian ---------- */
       var bzRes = null;
       try { bzRes = await SIKAPI.get('/busy'); } catch(_){}
-      var bz = (bzRes && bzRes.data) || { mode: 'auto', manualOn: false, busy: false, state: 'normal', inflight: 0, peak: 0, lagMs: 0, maxConc: 60, maxLagMs: 250, holdSecs: 10, releaseSecs: 20 };
+      var bz = (bzRes && bzRes.data) || { mode: 'auto', manualOn: false, busy: false, state: 'normal', inflight: 0, peak: 0, lagMs: 0, maxConc: 8, maxLagMs: 250, holdSecs: 10, releaseSecs: 20, platform: 'node', uptimeSecs: 0, warming: false };
       var bzStateTxt = { normal: 'Normal', busy: 'Sibuk — antrian terbuka', recovering: 'Pemulihan — antrian menutup perlahan', off: 'Fitur mati' };
       var bzCard =
         '<div class="card card-pad" style="margin-bottom:16px;">'
         + '<h3 class="display-s">Beban sistem &amp; antrian otomatis</h3>'
+        + (bz.platform && bz.platform !== 'node'
+          ? '<p class="hint mt-8" style="color:var(--warn);">Platform terdeteksi: <b>serverless (' + esc(bz.platform) + ')</b> — instans bisa tertidur di antara permintaan, sehingga sinyal "jeda server" dibatasi ketat (warmup &amp; clamp) agar tidak salah membuka antrian. Sinyal utama di platform ini: jumlah permintaan aktif.</p>'
+          : '<p class="hint mt-8">Platform: server Node persisten — kedua sinyal beban aktif penuh.</p>')
         + '<p class="small muted mt-8">Saat banyak pengguna mengakses bersamaan dan server melewati ambang, pengunjung halaman otomatis diarahkan ke halaman antrian dan dikembalikan begitu sistem normal. Mode <b>auto</b> mendeteksi sendiri (jumlah permintaan aktif + jeda event-loop); mode <b>manual</b> untuk uji coba atau pemeliharaan terjadwal; mode <b>off</b> mematikan fitur sepenuhnya.</p>'
         + '<div class="grid-2 mt-16">'
         + '<div class="field"><label>Mode deteksi</label>'
@@ -2662,14 +2665,14 @@
         + '</select></div></div>'
         + '</div>'
         + '<div class="grid-2 mt-12">'
-        + '<div class="field"><label>Ambang permintaan aktif</label><div class="input-shell"><input id="bzConc" type="number" min="1" value="' + (bz.maxConc || 60) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian terbuka bila permintaan bersamaan melewati angka ini.</span></div>'
+        + '<div class="field"><label>Ambang permintaan aktif</label><div class="input-shell"><input id="bzConc" type="number" min="1" value="' + (bz.maxConc || 8) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian terbuka bila permintaan bersamaan melewati angka ini.</span></div>'
         + '<div class="field"><label>Ambang jeda server (ms)</label><div class="input-shell"><input id="bzLag" type="number" min="20" value="' + (bz.maxLagMs || 250) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Keterlambatan event-loop yang menandakan server kewalahan.</span></div>'
         + '</div>'
         + '<div class="grid-2 mt-12">'
         + '<div class="field"><label>Tahan sebelum antrian (detik)</label><div class="input-shell"><input id="bzHold" type="number" min="1" value="' + (bz.holdSecs || 10) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Mencegah antrian terbuka karena lonjakan sesaat.</span></div>'
         + '<div class="field"><label>Lepas setelah normal (detik)</label><div class="input-shell"><input id="bzRelease" type="number" min="5" value="' + (bz.releaseSecs || 20) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian ditutup setelah beban stabil normal selama durasi ini.</span></div>'
         + '</div>'
-        + '<p class="hint mt-8">Status saat ini: <b>' + esc(bzStateTxt[bz.state] || bz.state) + '</b> — aktif ' + (bz.inflight || 0) + ' permintaan (puncak ' + (bz.peak || 0) + '), jeda ' + (bz.lagMs || 0) + ' ms.</p>'
+        + '<p class="hint mt-8">Status saat ini: <b>' + esc(bzStateTxt[bz.state] || bz.state) + '</b> — aktif ' + (bz.inflight || 0) + ' permintaan (puncak ' + (bz.peak || 0) + '), jeda ' + (bz.lagMs || 0) + ' ms' + (bz.uptimeSecs !== undefined ? ' · umur sesi ' + bz.uptimeSecs + ' dtk' : '') + (bz.warming ? ' · <b style="color:var(--warn);">fase bangun — jeda sementara diabaikan</b>' : '') + '.</p>'
         + (canEdit ? '<div class="row gap-12 mt-12"><button class="btn btn-primary btn-sm" id="bzSave">Simpan Beban Sistem</button><button class="btn btn-soft btn-sm" id="bzTest">Lihat halaman antrian</button></div>' : '')
         + (!bzRes ? '<p class="hint mt-8">Backend belum mendukung modul beban sistem — perbarui server ke versi terbaru.</p>' : '')
         + '</div>';

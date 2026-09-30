@@ -35,7 +35,7 @@ router.get('/health', (req, res) => res.json({ ok: true, uptime: Math.round(proc
 router.get('/busy-status', (req, res) => {
   try {
     const s = require('../busy').snapshot();
-    res.json({ ok: true, data: { state: s.state, busy: s.busy, mode: s.mode, inflight: s.inflight, lagMs: s.lagMs, releaseSecs: s.releaseSecs } });
+    res.json({ ok: true, data: { state: s.state, busy: s.busy, mode: s.mode, inflight: s.inflight, lagMs: s.lagMs, maxConc: s.maxConc, maxLagMs: s.maxLagMs, releaseSecs: s.releaseSecs, platform: s.platform, uptimeSecs: s.uptimeSecs, warming: s.warming } });
   } catch(e){ res.json({ ok: true, data: { state: 'normal', busy: false, mode: 'off' } }); }
 });
 

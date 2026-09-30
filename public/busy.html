@@ -19,7 +19,7 @@
   }
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:18px;
-    max-width:420px; width:100%; padding:36px 30px; text-align:center;
+    max-width:460px; width:100%; padding:36px 30px; text-align:center;
     box-shadow:0 10px 40px rgba(28,35,51,.07);
   }
   .ring{ position:relative; width:96px; height:96px; margin:0 auto 18px; }
@@ -30,8 +30,11 @@
   }
   h1{ font-size:1.25rem; margin-bottom:8px; }
   p{ color:var(--muted); font-size:.9rem; line-height:1.55; }
-  .state{ margin-top:16px; font-size:.8rem; padding:8px 14px; border-radius:999px; display:inline-block; }
+  .reason{ margin-top:10px; font-size:.8rem; color:var(--muted); line-height:1.5; }
+  .reason b{ color:var(--ink); }
+  .state{ margin-top:14px; font-size:.8rem; padding:8px 14px; border-radius:999px; display:inline-block; }
   .state.wait{ background:var(--brand-soft); color:var(--brand); }
+  .state.err{ background:#fdeaea; color:#b3261e; }
   .state.ok{ background:#e2f5ea; color:var(--ok); }
   .bar{ height:6px; background:var(--brand-soft); border-radius:999px; margin-top:20px; overflow:hidden; }
   .bar > i{ display:block; height:100%; width:35%; background:var(--brand); border-radius:999px; animation:slide 1.4s ease-in-out infinite; }
@@ -39,6 +42,7 @@
   .btn{
     margin-top:20px; display:none; width:100%; padding:12px; border:0; border-radius:12px;
     background:var(--brand); color:#fff; font-weight:600; font-size:.95rem; cursor:pointer;
+    text-decoration:none;
   }
   .btn:hover{ filter:brightness(1.07); }
   .tiny{ margin-top:14px; font-size:.72rem; color:var(--muted); }
@@ -54,11 +58,13 @@
     <div class="num" id="count">–</div>
   </div>
   <h1>Sistem sedang sibuk</h1>
-  <p>Saat ini banyak pengguna mengakses bersamaan. Permintaan Anda kami tempatkan dalam antrian — halaman akan <b>terbuka otomatis</b> begitu sistem kembali normal. Halaman ini tidak perlu dimuat ulang.</p>
+  <p>Saat ini beban pengguna melebihi kapasitas. Permintaan Anda kami tempatkan dalam antrian dan halaman tujuan akan <b>terbuka otomatis</b> begitu sistem kembali normal.</p>
+  <div class="reason" id="reason">Membaca kondisi sistem…</div>
   <div class="state wait" id="state">Mempantau beban sistem…</div>
   <div class="bar"><i></i></div>
   <button class="btn" id="go">Buka halaman tujuan</button>
-  <p class="tiny" id="meta">Posisi diperbarui otomatis setiap 5 detik.</p>
+  <button class="btn" id="reload" style="background:var(--muted);">Muat ulang halaman antrian</button>
+  <p class="tiny" id="meta"></p>
 </main>
 <script>
 (function(){
@@ -68,11 +74,14 @@
   if(!/^\/[^\f\r\n\v]*$/.test(ret)) ret = '/'; /* hanya path internal */
   var countEl = document.getElementById('count');
   var stateEl = document.getElementById('state');
+  var reasonEl = document.getElementById('reason');
   var arcEl = document.getElementById('arc');
   var metaEl = document.getElementById('meta');
   var goBtn = document.getElementById('go');
+  var reloadBtn = document.getElementById('reload');
   var CIRC = 264, PERIOD = 30; /* lingkaran penuh = 30 detik menunggu */
-  var waited = 0, stopped = false;
+  var MAXWAIT = 180; /* setelah 3 menit, tawarkan muat ulang secara eksplisit */
+  var waited = 0, stopped = false, fails = 0, lastData = null;
 
   function setRing(sec){
     var frac = (sec % PERIOD) / PERIOD;
@@ -80,16 +89,27 @@
     countEl.textContent = sec >= PERIOD ? Math.floor(sec / 60) + 'm' : String(sec % PERIOD);
   }
 
+  function reasonText(d){
+    var lag = d.lagMs || 0, lagMax = d.maxLagMs || 0;
+    var act = d.inflight || 0, actMax = d.maxConc || 0;
+    if(d.state === 'recovering') return 'Sistem sudah pulih — menyelesaikan sisa antrian.';
+    if(lagMax > 0 && lag >= lagMax) return 'Penyebab: jeda pemrosesan server tinggi — <b>' + lag + ' ms</b> (ambang ' + lagMax + ' ms).';
+    if(actMax > 0 && act >= actMax) return 'Penyebab: banyak pengguna aktif bersamaan — <b>' + act + '</b> (ambang ' + actMax + ').';
+    return 'Menunggu pembacaan beban stabil…';
+  }
+
   function normal(state){
     if(stopped) return;
     stopped = true;
     stateEl.className = 'state ok';
     stateEl.textContent = 'Sistem normal — membuka halaman…';
-    metaEl.textContent = 'Anda akan diarahkan otomatis.';
+    reasonEl.innerHTML = 'Anda akan diarahkan otomatis.';
     goBtn.style.display = 'block';
     goBtn.onclick = function(){ location.replace(ret); };
     setTimeout(function(){ location.replace(ret); }, 1200);
   }
+
+  function showingCap(){ return waited >= MAXWAIT && !stopped; }
 
   async function poll(){
     if(stopped) return;
@@ -97,17 +117,42 @@
       var r = await fetch('/api/public/busy-status', { cache: 'no-store' });
       var j = await r.json();
       var d = (j && j.data) || {};
+      lastData = d;
+      fails = 0;
       if(!d.busy && d.state !== 'busy' && d.state !== 'recovering') return normal(d);
-      var antrian = (d.state === 'recovering') ? 'Sistem pulih — menyelesaikan antrian terakhir…' : 'Masih sibuk (beban ' + (d.inflight || 0) + ' pengguna aktif)';
-      stateEl.textContent = antrian;
-    } catch(e){ /* jaringan bergetar — coba lagi */ }
+      stateEl.className = 'state wait';
+      stateEl.textContent = (d.state === 'recovering')
+        ? 'Sistem pulih — menyelesaikan antrian terakhir…'
+        : 'Masih sibuk — menunggu beban turun…';
+      reasonEl.innerHTML = reasonText(d);
+      var t = [];
+      if(d.inflight !== undefined && d.maxConc) t.push('aktif ' + d.inflight + '/' + d.maxConc);
+      if(d.lagMs !== undefined && d.maxLagMs) t.push('jeda ' + d.lagMs + '/' + d.maxLagMs + ' ms');
+      if(d.uptimeSecs !== undefined) t.push('umur sesi ' + d.uptimeSecs + ' dtk');
+      metaEl.textContent = t.join(' · ') + ' — diperbarui otomatis.';
+    } catch(e){
+      fails++;
+      if(fails >= 5 && !showingCap()){
+        stateEl.className = 'state err';
+        stateEl.textContent = 'Koneksi ke sistem tidak stabil.';
+        reasonEl.textContent = 'Tidak bisa membaca status antrian. Periksa koneksi internet, lalu muat ulang.';
+      }
+    }
   }
 
   setRing(0);
   var tick = setInterval(function(){
     if(stopped){ clearInterval(tick); return; }
-    waited++; setRing(waited); poll();
+    waited++; setRing(waited);
+    /* Poll adaptif: rapat di awal (2 dtk), melonggarkan setelah 20 dtk (4 dtk). */
+    if(waited <= 20 || waited % 2 === 0) poll();
+    if(showingCap()){
+      reloadBtn.style.display = 'block';
+      reasonEl.innerHTML = 'Antrian lebih lama dari biasanya. Anda bisa tetap menunggu, atau <b>muat ulang</b> untuk mengecek ulang dari awal.';
+    }
+    if(waited >= 300 && !stopped){ location.reload(); } /* jaring pengaman terakhir */
   }, 1000);
+  reloadBtn.onclick = function(){ location.reload(); };
   poll();
 })();
 </script>

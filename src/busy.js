@@ -10,7 +10,8 @@
       - concurrency : jumlah request yang sedang diproses
         (sampel puncak 10 dtk terakhir)
       - lag         : delay event-loop (ms, EMA) — server sibuk CPU/DB
-        membuat interval melambat; sinyal paling jujur.
+        membuat interval melambat; sinyal paling jujur di server yang
+        hidup terus-menerus.
    3. Mode (settings DB 'busy_mode', env BUSY_MODE menang):
       - auto   : halaman antrian muncul otomatis saat sibuk (default)
       - manual : superadmin paksa buka/tutup dari dashboard
@@ -29,13 +30,34 @@
         pengelola tetap bisa mengendalikan sistem saat sibuk.
    6. Kegagalan modul TIDAK PERNAH mematikan situs (semua error = lewat).
 
+   Pelajaran produksi (serverless — Vercel/Render gratis):
+   - Instance serverless di-suspend antar request; begitu bangun, semua
+     timer melompat sekaligus. Tanpa pengaman, EMA lag membaca ratusan
+     ms padahal tidak ada beban → antrian terbuka terus → pengguna
+     terjebak loop halaman antrian.
+   - Pengaman yang dipakai di sini:
+     a) WARMUP : sampel lag diabaikan selama 60 dtk pertama umur proses
+        (plus 60 dtk pertama setiap kali proses kembali menerima
+        trafik setelah >3 menit diam — ciri khas bangun dari suspend).
+     b) OUTLIER: sampel dengan lompatan timer > 2 dtk dibuang utuh —
+        itu artefak suspend/cold-start, bukan beban pengguna; sementara
+        lag nyata yang berkelanjutan tetap terbaca jujur oleh EMA.
+     c) CONC   : concurrency dihitung per-proses; di serverless tiap
+        instance melayani sedikit request, jadi ambang default
+        diturunkan agar sinyal ini yang memicu, bukan lag.
+     d) GATE CACHE : keputusan open/close di-cache 5 dtk per proses —
+        cukup untuk menahan lonjakan sesaat, tetap responsif saat
+        beban benar-benar tinggi.
+
    Konfigurasi (dashboard Pengaturan → Beban Sistem, atau env):
    - busy_mode           auto | manual | off   (default auto)
    - busy_manual_on      0 | 1                 (khusus mode manual)
-   - busy_max_conc       60   (default, request aktif)
+   - busy_max_conc       8    (default, request aktif per proses)
    - busy_max_lag_ms     250  (default, ms lag event-loop)
    - busy_hold_secs      10   (detik di atas ambang → antrian)
    - busy_release_secs   20   (detik normal → antrian ditutup)
+   - BUSY_WARMUP_SECS    60   (detik tanpa sinyal lag saat proses
+        boot / bangun dari suspend; 0 untuk menonaktifkan)
    ============================================================ */
 const crypto = require('crypto');
 
@@ -50,15 +72,25 @@ let peak = 0; /* puncak concurrency dalam sampel 10 dtk terakhir */
 let lagEma = 0; /* event-loop lag (ms), EMA alfa 0.2 */
 let lastFlush = Date.now();
 let lastPeakAt = Date.now();
+const bootAt = Date.now(); /* umur proses — untuk warmup cold start */
+const _ws = parseInt(process.env.BUSY_WARMUP_SECS, 10);
+const WARMUP_MS = (isNaN(_ws) || _ws < 0 ? 60 : _ws) * 1000;
+const platform = process.env.VERCEL ? 'vercel'
+  : (process.env.RENDER || process.env.RENDER_EXTERNAL_URL) ? 'render'
+  : process.env.AWS_LAMBDA_FUNCTION_NAME ? 'lambda'
+  : 'node';
+let warmUntil = bootAt + WARMUP_MS; /* sampai kapan sampel lag diabaikan */
+let lastReqAt = 0; /* request terakhir — deteksi bangun dari suspend */
 
 /* Konfigurasi efektif (di-cache, disegarkan tiap 15 dtk dari DB) */
-const cfg = { mode: 'auto', manualOn: 0, maxConc: 60, maxLagMs: 250, holdSecs: 10, releaseSecs: 20 };
+const cfg = { mode: 'auto', manualOn: 0, maxConc: 8, maxLagMs: 250, holdSecs: 10, releaseSecs: 20 };
 let cfgAt = 0;
 let _initing = false;
 
 function refreshCfg(){
   if(_initing) return Promise.resolve();
   _initing = true;
+  const prevMode = cfg.mode, prevManual = cfg.manualOn;
   return (async () => {
     try {
       const { q } = require('./db');
@@ -77,6 +109,12 @@ function refreshCfg(){
     } catch(_){ /* DB belum siap — pakai konfigurasi sekarang */ }
     cfgAt = Date.now();
     _initing = false;
+    /* Perubahan mode manual berlaku seketika — tanpa menunggu tick 250 ms —
+       supaya paksa-buka/paksa-tutup dari dashboard langsung terasa. */
+    if(cfg.mode === 'manual' && (prevMode !== 'manual' || prevManual !== cfg.manualOn)){
+      if(cfg.manualOn){ openSince = openSince || Date.now(); openState = true; }
+      else { openState = false; openSince = 0; overSince = 0; underSince = 0; }
+    }
   })();
 }
 function cfgAsync(){ return (Date.now() - cfgAt > 15000) ? refreshCfg() : Promise.resolve(); }
@@ -99,13 +137,28 @@ function eff(){
   };
 }
 
-/* ---------- Sampler lag event-loop (interval 250 ms, EMA 0.2) ---------- */
+/* ---------- Sampler lag event-loop (interval 250 ms, EMA 0.2) ----------
+   Anti false-positive platform serverless:
+   - Warmup: selama BUSY_WARMUP_SECS (default 60) dtk pertama umur
+     proses, dan selama durasi yang sama setiap kali proses kembali
+     menerima trafik setelah diam >3 menit (ciri bangun dari suspend),
+     sampel lag TIDAK dihitung — timer yang melompat saat boot bukan
+     beban pengguna.
+   - Outlier: lompatan timer > 2 dtk dibuang utuh (artefak suspend/
+     cold-start); lag nyata yang berkelanjutan tetap terbaca EMA. */
 const sampler = setInterval(() => {
   const now = Date.now();
   const dt = now - lastFlush;
-  lagEma = lagEma * 0.8 + Math.max(0, dt - 250) * 0.2;
   lastFlush = now;
+  if(now < warmUntil){
+    /* fase warmup — sampel diabaikan */
+  } else if(dt > 0 && dt <= 2000){
+    const step = Math.max(0, dt - 250);
+    if(step > 0) lagEma = lagEma * 0.8 + step * 0.2;
+  }
   if(now - cfgAt > 15000) refreshCfg();
+  /* Histeresis dimajukan timer — jalan terus walau tanpa trafik */
+  tickState(now);
 }, 250);
 sampler.unref();
 
@@ -117,35 +170,45 @@ const flusher = setInterval(() => {
 
 /* ---------- Status antrian + hysteresis ---------- */
 let openSince = 0, overSince = 0, underSince = 0;
+let openState = false;
 
+function overThreshold(e){
+  return inflight >= e.maxConc || lagEma >= e.maxLagMs;
+}
 function isBusyNow(e){
   if(e.mode === 'off') return false;
   if(e.mode === 'manual') return !!e.manualOn;
-  return inflight >= e.maxConc || lagEma >= e.maxLagMs;
+  return overThreshold(e);
 }
 
-async function queueOpen(){
+/* Histeresis dimajukan sampler tiap 250 ms (tickState) — bukan oleh
+   request yang lewat gerbang — sehingga hitungan hold/release tetap
+   berjalan walau TIDAK ADA trafik yang melewati gerbang, misalnya saat
+   semua pengguna menunggu di halaman antrian (dulu: detik histeresis
+   berhenti menghitung dan antrian terasa tidak pernah selesai). */
+function tickState(now){
   const e = eff();
-  if(e.mode === 'off') return false;
+  if(e.mode === 'off'){ openState = false; openSince = 0; overSince = 0; underSince = 0; return; }
   if(e.mode === 'manual'){
-    if(e.manualOn){ if(!openSince) openSince = Date.now(); }
-    else openSince = 0;
-    return !!e.manualOn;
+    openState = !!e.manualOn;
+    if(e.manualOn){ if(!openSince) openSince = now; } else openSince = 0;
+    overSince = 0; underSince = 0;
+    return;
   }
-  /* auto + hysteresis */
-  const busy = inflight >= e.maxConc || lagEma >= e.maxLagMs;
-  const now = Date.now();
-  if(busy){
+  if(overThreshold(e)){
     underSince = 0;
     if(!overSince) overSince = now;
     if(now - overSince >= e.holdSecs * 1000){ if(!openSince) openSince = now; }
   } else {
     overSince = 0;
     if(!underSince) underSince = now;
-    else if(now - underSince >= e.releaseSecs * 1000){ openSince = 0; }
+    else if(now - underSince >= e.releaseSecs * 1000) openSince = 0;
   }
-  return !!openSince;
+  openState = !!openSince;
 }
+
+/* Keputusan gerbang membaca hasil histeresis terakhir (murah & konsisten). */
+async function queueOpen(){ return openState; }
 
 function snapshot(){
   const e = eff();
@@ -158,7 +221,13 @@ function snapshot(){
     inflight, peak, lagMs: Math.round(lagEma),
     maxConc: e.maxConc, maxLagMs: e.maxLagMs,
     holdSecs: e.holdSecs, releaseSecs: e.releaseSecs,
-    queueOpenSince: openSince || null
+    queueOpenSince: openSince || null,
+    /* Transparansi platform: pengguna bisa melihat sendiri apakah
+       sistem benar-benar sibuk atau baru sekadar bangun dari tidur. */
+    platform,
+    uptimeSecs: Math.round((Date.now() - bootAt) / 1000),
+    warming: Date.now() < warmUntil,
+    lagSignal: platform === 'node' ? 'aktif' : 'dibatasi (serverless)'
   };
 }
 
@@ -166,8 +235,8 @@ function setManual(on, mode){
   cfg.manualOn = on ? 1 : 0;
   if(mode) cfg.mode = mode;
   cfgAt = Date.now();
-  if(on){ openSince = openSince || Date.now(); }
-  else { openSince = 0; overSince = 0; underSince = 0; }
+  if(on){ openSince = openSince || Date.now(); openState = true; }
+  else { openSince = 0; overSince = 0; underSince = 0; openState = false; }
 }
 
 /* ---------- Admin bypass: decode payload JWT (tanpa verifikasi tanda tangan —
@@ -186,6 +255,11 @@ function isAdminReq(req){
 
 /* ---------- Middleware penghitung ---------- */
 function track(req, res, next){
+  const now = Date.now();
+  /* Bangun dari suspend/di-throttle (diam >3 menit) → warmup lag lagi,
+     supaya lonjakan timer saat bangun tidak membuka antrian palsu. */
+  if(lastReqAt && now - lastReqAt > 3 * 60000) warmUntil = now + WARMUP_MS;
+  lastReqAt = now;
   inflight++;
   if(inflight > peak) peak = inflight;
   let done = false;
