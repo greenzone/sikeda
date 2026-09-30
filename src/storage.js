@@ -409,7 +409,9 @@ async function upGdrive(rel, buf){
 /* ============================================================
    Migrasi file lama & kuota driver (untuk dashboard superadmin)
    ============================================================ */
-/* Daftar semua file di penyimpanan lokal (rel 'uploads/…' + ukuran) */
+/* Daftar semua file di penyimpanan lokal.
+   rel selalu berprefix 'uploads/' (konvensi DB/URL /uploads/...) meski
+   di disk file berada langsung di dalam UPLOADS_DIR. */
 function listLocalFiles(){
   const root = path.resolve(uploadsRoot());
   const out = [];
@@ -420,7 +422,10 @@ function listLocalFiles(){
       const full = path.join(d, e.name);
       if(e.isDirectory()) walk(full);
       else if(e.isFile()){
-        try { out.push({ rel: path.relative(root, full).split(path.sep).join('/'), size: fs.statSync(full).size }); } catch(_){}
+        try {
+          const relInner = path.relative(root, full).split(path.sep).join('/');
+          out.push({ rel: 'uploads/' + relInner, size: fs.statSync(full).size });
+        } catch(_){}
       }
     }
   })(root);
@@ -429,11 +434,15 @@ function listLocalFiles(){
 }
 
 /* Kirim ulang satu file lokal yang sudah ada ke driver remote aktif
-   (tanpa menulis ulang lokal — mirror murni). */
+   (tanpa menulis ulang lokal — mirror murni).
+   rel diawali 'uploads/…' (konvensi DB/URL); file di disk langsung di
+   dalam UPLOADS_DIR (prefix dihapus saat membaca), kunci remote tetap
+   berprefix 'uploads/' (cocok dengan publicUrl). */
 async function mirrorLocal(rel){
   const r = String(rel || '').replace(/^\/+/, '');
+  const inner = r.replace(/^uploads\//, '');
   const root = path.resolve(uploadsRoot());
-  const full = path.resolve(root, r);
+  const full = path.resolve(root, inner);
   if(!full.startsWith(root) || !fs.existsSync(full)) throw new Error('Berkas tidak ditemukan di penyimpanan lokal.');
   const d = await driver();
   if(d === 'local' || d === 'cdn') throw new Error('Driver aktif lokal/CDN — tidak ada mirror remote.');
@@ -495,6 +504,201 @@ async function driverQuota(){
   return out;
 }
 
+/* ---------- Daftar kunci remote yang sudah ada (untuk status "tersalin") ----------
+   Mengembalikan Set kunci remote (rel 'uploads/…'). Best effort: gagal = Set kosong. */
+const REMOTE_LIST_LIMIT = 10000; /* batas aman enumerasi */
+async function listRemoteKeys(){
+  const d = await driver();
+  const keys = new Set();
+  try {
+    if(d === 's3'){
+      const c = await s3Cfg();
+      if(!c.endpoint || !c.accessKey || !c.secretKey || !c.bucket) return keys;
+      let marker = '';
+      for(let page = 0; page < 20; page++){ /* maks 20 halaman × 1000 */
+        const qm = marker ? ('?marker=' + encodeURIComponent(marker)) : '';
+        const resp = await s3Request('GET', c, '/' + qm, '', {});
+        const xml = await resp.text();
+        const found = xml.match(/<Key>([^<]+)<\/Key>/g) || [];
+        for(const m of found) keys.add(m.slice(5, -6));
+        const trunc = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+        const lm = xml.match(/<NextMarker>([^<]+)<\/NextMarker>/);
+        if(!trunc){ break; }
+        if(lm){ marker = lm[1]; continue; }
+        const lastKey = found.length ? found[found.length - 1].slice(5, -6) : null;
+        if(!lastKey || marker === lastKey) break;
+        marker = lastKey;
+        if(keys.size >= REMOTE_LIST_LIMIT) break;
+      }
+    } else if(d === 'cloudinary'){
+      const c = await cloudCfg();
+      if(!c.cloud || !c.key || !c.secret) return keys;
+      let nextCursor = null;
+      for(let page = 0; page < 40; page++){ /* maks 40 × 500 */
+        const ts = Date.now();
+        const sig = crypto.createHash('sha1').update('timestamp=' + ts + c.secret).digest('hex');
+        const url = 'https://api.cloudinary.com/v1_1/' + c.cloud + '/resources/image?max_results=500&timestamp=' + ts + '&api_key=' + c.key + '&signature=' + sig + (nextCursor ? '&next_cursor=' + nextCursor : '');
+        const resp = await fetch(url);
+        if(!resp.ok) break;
+        const j = await resp.json().catch(() => ({}));
+        for(const r of (j.resources || [])) keys.add(r.public_id + (r.format ? '.' + r.format : ''));
+        if(!j.next_cursor || keys.size >= REMOTE_LIST_LIMIT) break;
+        nextCursor = j.next_cursor;
+      }
+    } else if(d === 'supabase'){
+      const c = await supaCfg();
+      if(!c.url || !c.serviceKey) return keys;
+      let offset = 0;
+      for(let page = 0; page < 40; page++){ /* maks 40 × 250 */
+        const resp = await fetch(c.url.replace(/\/+$/, '') + '/storage/v1/object/list/' + c.bucket, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + c.serviceKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefix: '', limit: 250, offset, sortBy: { column: 'name', order: 'asc' } })
+        });
+        if(!resp.ok) break;
+        const arr = await resp.json().catch(() => []);
+        if(!Array.isArray(arr) || !arr.length) break;
+        /* API list TIDAK rekursif — kunci remote kita tinggal di folder 'uploads/' */
+        for(const o of arr){ if(o.name && o.id) keys.add('uploads/' + o.name); }
+        if(arr.length < 250 || keys.size >= REMOTE_LIST_LIMIT) break;
+        offset += 250;
+      }
+    } else if(d === 'gdrive'){
+      const c = await gdriveCfg();
+      if(!c.clientId || !c.clientSecret || !c.refreshToken) return keys;
+      const tok = await gToken();
+      const parent = c.folderId || 'root';
+      let pageToken = null;
+      for(let page = 0; page < 40; page++){ /* maks 40 × 250 */
+        const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent("'" + parent + "' in parents and trashed=false") + '&fields=' + encodeURIComponent('files(name),nextPageToken') + '&pageSize=250' + (pageToken ? '&pageToken=' + pageToken : '');
+        const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + tok } });
+        if(!resp.ok) break;
+        const j = await resp.json().catch(() => ({}));
+        for(const f of (j.files || [])) if(f.name) keys.add('uploads/' + f.name); /* file diunggah flat dgn nama basename */
+        if(!j.nextPageToken || keys.size >= REMOTE_LIST_LIMIT) break;
+        pageToken = j.nextPageToken;
+      }
+    }
+  } catch(e){ console.warn('[storage] listRemoteKeys ' + d + ':', e.message); }
+  return keys;
+}
+
+async function remoteHas(rel){
+  const keys = await listRemoteKeys();
+  return keys.has(String(rel || '').replace(/^\/+/, ''));
+}
+
+/* ============================================================
+   Migrasi otomatis berkas lama (background, bertahap, aman restart)
+   - Engine 'interval': server Node biasa (root & deploy-render).
+   - Engine 'manual-on-boot': Vercel (serverless tak punya timer)
+     — dijalankan sekali per cold start via automigStart(false).
+   Progres persist di settings (automig_state) — aman dipanggil ulang.
+   ============================================================ */
+const AUTOMIG_KEY = 'automig_state';
+function automigDefaults(){
+  return { enabled: false, batch: 10, intervalSecs: 30, done: [], failed: {}, total: 0, processed: 0, ok: 0, lastRun: null, lastErr: null };
+}
+function sanitizeAutomig(s){
+  const d = automigDefaults();
+  if(!s || typeof s !== 'object') return d;
+  return {
+    enabled: !!s.enabled,
+    batch: Math.min(Math.max(parseInt(s.batch, 10) || d.batch, 1), 100),
+    intervalSecs: Math.min(Math.max(parseInt(s.intervalSecs, 10) || d.intervalSecs, 10), 3600),
+    done: Array.isArray(s.done) ? s.done.slice(0, 20000) : [],
+    failed: (s.failed && typeof s.failed === 'object' && !Array.isArray(s.failed)) ? s.failed : {},
+    total: parseInt(s.total, 10) || 0,
+    processed: parseInt(s.processed, 10) || 0,
+    ok: parseInt(s.ok, 10) || 0,
+    lastRun: s.lastRun || null,
+    lastErr: s.lastErr || null
+  };
+}
+/* State disimpan di tabel sendiri (bukan settings) — daftar 'done' bisa
+   berisi ribuan nama berkas, melebihi kolom settings VARCHAR(255). */
+function ensureAutomigTable(){
+  const { q } = require('./db');
+  return q(`CREATE TABLE IF NOT EXISTS automig_state (
+    id INT PRIMARY KEY,
+    data MEDIUMTEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch(() => {});
+}
+async function automigLoad(){
+  try {
+    await ensureAutomigTable();
+    const { q } = require('./db');
+    const rows = await q('SELECT data FROM automig_state WHERE id = 1');
+    return sanitizeAutomig(rows[0] ? decJSON(rows[0].data) : null);
+  } catch(e){ return automigDefaults(); }
+}
+async function automigSave(st){
+  await ensureAutomigTable();
+  const { q } = require('./db');
+  await q('INSERT INTO automig_state (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)', [encJSON(st)]);
+}
+
+let _automigRunning = false;
+async function automigStep(){
+  if(_automigRunning) return { skipped: true, reason: 'sudah berjalan' };
+  _automigRunning = true;
+  try {
+    const d = await driver();
+    if(d === 'local' || d === 'cdn') return { skipped: true, reason: 'driver lokal/CDN' };
+    const st = await automigLoad();
+    if(!st.enabled) return { skipped: true, reason: 'nonaktif' };
+    /* Bangun daftar file yang belum tersalin (cache 10 menit di memori) */
+    const now = Date.now();
+    if(!_migPlan || now - _migPlan.at > 600000 || _migPlan.driver !== d){
+      const [locals, remotes] = [listLocalFiles(), await listRemoteKeys()];
+      const todo = locals.filter(f => f.rel !== 'uploads/.gitkeep' && f.size > 0 && !remotes.has(f.rel)).map(f => f.rel);
+      _migPlan = { at: now, driver: d, todo };
+    }
+    const todo = _migPlan.todo.filter(r => !st.done.includes(r));
+    if(!todo.length){
+      st.processed = st.done.length; st.total = st.done.length;
+      await automigSave(st);
+      return { skipped: true, reason: 'semua berkas tersalin', done: st.done.length };
+    }
+    const batch = todo.slice(0, st.batch);
+    const doneBefore = st.done.length; /* total = sisa + sebelum batch (batch dikeluarkan dari todo) */
+    let okN = 0;
+    for(const rel of batch){
+      try { await mirrorLocal(rel); st.done.push(rel); st.ok++; okN++; delete st.failed[rel]; }
+      catch(e){ st.failed[rel] = String(e.message || 'gagal').slice(0, 140); }
+      st.processed++;
+    }
+    st.total = doneBefore + todo.length;
+    st.lastRun = new Date().toISOString();
+    st.lastErr = okN ? null : (st.failed[batch[0]] || null);
+    await automigSave(st);
+    return { ok: true, batch: batch.length, okN, done: st.done.length, total: st.total, failed: Object.keys(st.failed).length };
+  } catch(e){
+    return { error: e.message };
+  } finally { _automigRunning = false; }
+}
+let _migPlan = null;
+let _automigTimer = null;
+
+/* interval=true → pasang timer (server Node biasa); false → sekali jalan (cold start) */
+function automigStart(interval){
+  (async () => {
+    const st = await automigLoad();
+    if(!st.enabled) return;
+    if(interval && _automigTimer) return; /* timer sudah ada */
+    if(_automigTimer){ clearInterval(_automigTimer); _automigTimer = null; }
+    const tick = () => { automigStep().catch(() => {}); };
+    if(interval){
+      _automigTimer = setInterval(tick, Math.max(st.intervalSecs, 10) * 1000);
+      _automigTimer.unref();
+    }
+    tick(); /* sekali langsung (boot / pasang) */
+  })().catch(() => {});
+  return true;
+}
+function automigStop(){ if(_automigTimer){ clearInterval(_automigTimer); _automigTimer = null; } }
+
 /* ---------- Middleware /uploads/* untuk server Node bawaan ---------- */
 function serveUploads(req, res, next){
   (async () => {
@@ -517,4 +721,12 @@ function serveUploads(req, res, next){
   });
 }
 
-module.exports = { DRIVERS, driver, setDriver, setCdnBase, cdnBase, publicUrl, writeFile, removeFile, serveUploads, CREDS_FIELDS, ENV_MAP, credStatus, loadCreds, saveCreds, ensureCredsTable, cloudCfg, supaCfg, gdriveCfg, s3Cfg, s3Request, listLocalFiles, mirrorLocal, driverQuota };
+/* ---------- Link dokumentasi resmi per driver (untuk UI) ---------- */
+const DOC_LINKS = {
+  cloudinary: { label: 'Dokumentasi Cloudinary — Memulai & Access Keys', url: 'https://cloudinary.com/documentation/how_to_integrate_cloudinary' },
+  supabase:   { label: 'Dokumentasi Supabase Storage', url: 'https://supabase.com/docs/guides/storage' },
+  gdrive:     { label: 'Google Drive API — Panduan Node.js', url: 'https://developers.google.com/drive/api/guides/about-sdk' },
+  s3:         { label: 'Backblaze B2 S3-Compatible API', url: 'https://www.backblaze.com/docs/cloud-storage-s3-compatible-api' }
+};
+
+module.exports = { DRIVERS, driver, setDriver, setCdnBase, cdnBase, publicUrl, writeFile, removeFile, serveUploads, CREDS_FIELDS, ENV_MAP, credStatus, loadCreds, saveCreds, ensureCredsTable, cloudCfg, supaCfg, gdriveCfg, s3Cfg, s3Request, listLocalFiles, mirrorLocal, driverQuota, listRemoteKeys, remoteHas, DOC_LINKS, automigLoad, automigSave, automigStep, automigStart, automigStop, AUTOMIG_KEY };

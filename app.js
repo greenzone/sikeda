@@ -82,6 +82,8 @@ function ensureMigrated(){
     if(!pgCols.length){
       await pool.query("ALTER TABLE pengumuman ADD COLUMN channels VARCHAR(64) NOT NULL DEFAULT '' AFTER prioritas").catch(() => {});
     }
+    /* Migrasi otomatis berkas lama (serverless: sekali per cold start) */
+    require('./src/storage').automigStart(false);
   })().catch(e => { migrated = null; throw e; });
   return migrated;
 }

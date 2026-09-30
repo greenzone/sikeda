@@ -2205,7 +2205,9 @@ router.get('/storage/files', requireRole('superadmin'), async (req, res) => {
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     let files = storage.listLocalFiles().filter(f => f.rel !== 'uploads/.gitkeep' && f.size > 0);
     const total = files.length;
-    files = files.slice(offset, offset + limit).map(f => ({ rel: f.rel, size: f.size, mirrored: null }));
+    let remotes = null;
+    if(String(req.query.withRemote) !== '0') remotes = await storage.listRemoteKeys();
+    files = files.slice(offset, offset + limit).map(f => ({ rel: f.rel, size: f.size, mirrored: remotes ? remotes.has(f.rel) : null }));
     res.json({ ok: true, data: { driver: d, total, offset, limit, files } });
   } catch(e){ res.status(500).json({ error: 'Gagal membaca daftar berkas.' }); }
 });
@@ -2230,6 +2232,43 @@ router.post('/storage/mirror', requireRole('superadmin'), async (req, res) => {
     await logAct(req.user, 'Mirror berkas lama ke penyimpanan ' + d, okN + '/' + results.length + ' berkas');
     res.json({ ok: true, driver: d, total: results.length, ok: okN, results });
   } catch(e){ res.status(500).json({ error: e.message || 'Mirror gagal.' }); }
+});
+
+/* GET /api/storage/automig → status migrasi otomatis */
+router.get('/storage/automig', requireRole('superadmin'), async (req, res) => {
+  try {
+    const s = await storage.automigLoad();
+    const failedList = Object.entries(s.failed || {}).slice(0, 20).map(([rel, err]) => ({ rel, err }));
+    res.json({ ok: true, data: {
+      enabled: s.enabled, batch: s.batch, intervalSecs: s.intervalSecs,
+      done: s.done.length, processed: s.processed, ok: s.ok, total: s.total,
+      failedCount: Object.keys(s.failed || {}).length, failedList,
+      lastRun: s.lastRun, lastErr: s.lastErr
+    } });
+  } catch(e){ res.status(500).json({ error: 'Gagal membaca status migrasi otomatis.' }); }
+});
+
+/* PUT /api/storage/automig {enabled, batch, intervalSecs} → atur (di Vercel: berlaku per cold start) */
+router.put('/storage/automig', requireRole('superadmin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const cur = await storage.automigLoad();
+    if(b.enabled !== undefined) cur.enabled = !!b.enabled;
+    if(b.batch !== undefined) cur.batch = Math.min(Math.max(parseInt(b.batch, 10) || 10, 1), 100);
+    if(b.intervalSecs !== undefined) cur.intervalSecs = Math.min(Math.max(parseInt(b.intervalSecs, 10) || 30, 10), 3600);
+    await storage.automigSave(cur);
+    await logAct(req.user, 'Pengaturan migrasi otomatis', 'enabled=' + cur.enabled + ', batch=' + cur.batch + ', interval=' + cur.intervalSecs + 's');
+    res.json({ ok: true, data: { enabled: cur.enabled, batch: cur.batch, intervalSecs: cur.intervalSecs } });
+  } catch(e){ res.status(500).json({ error: 'Gagal menyimpan pengaturan migrasi otomatis.' }); }
+});
+
+/* POST /api/storage/automig-run → jalankan satu langkah sekarang */
+router.post('/storage/automig-run', requireRole('superadmin'), async (req, res) => {
+  try {
+    const r = await storage.automigStep();
+    if(r.ok) await logAct(req.user, 'Migrasi otomatis: satu batch', r.okN + '/' + r.batch + ' berkas');
+    res.json({ ok: true, result: r });
+  } catch(e){ res.status(500).json({ error: e.message || 'Migrasi gagal.' }); }
 });
 
 /* ============================================================

@@ -2686,6 +2686,7 @@
         s3:         { judul: 'S3 / Backblaze B2', fields: { endpoint: ['Endpoint (https://…)', false], region: ['Region (mis. us-east-1)', false], access_key: ['Access Key ID', false], secret_key: ['Secret Access Key', true], bucket: ['Nama bucket', false] } }
       };
       function stSrcTxt(src){ return src === 'env' ? 'environment variables (menang atas dashboard)' : src === 'db' ? 'dashboard — tersimpan terenkripsi di database' : src === 'mixed' ? 'campuran env + dashboard' : 'belum ada kredensial'; }
+      var stDocLinks = st.docLinks || { cloudinary: { label: 'Dokumentasi Cloudinary', url: 'https://cloudinary.com/documentation/how_to_integrate_cloudinary' }, supabase: { label: 'Dokumentasi Supabase Storage', url: 'https://supabase.com/docs/guides/storage' }, gdrive: { label: 'Google Drive API', url: 'https://developers.google.com/drive/api/guides/about-sdk' }, s3: { label: 'Backblaze B2 S3-Compatible API', url: 'https://www.backblaze.com/docs/cloud-storage-s3-compatible-api' } };
       var stSummary =
         '<p class="hint mt-8" id="stSummary">Kesiapan kredensial — ' + Object.keys(stLabels).map(function(drv){
           var s2 = cs[drv] || { ready: false, source: null };
@@ -2702,6 +2703,7 @@
         }).join('');
         return '<div class="card card-pad" id="stCred_' + drv + '" style="margin-top:12px;display:' + (st.driver === drv ? 'block' : 'none') + ';">'
           + '<h4 style="margin:0 0 6px;font-size:.92rem;">Kesiapan kredensial — ' + L.judul + '</h4>'
+          + (stDocLinks[drv] ? '<p class="hint" style="margin:0 0 6px;"><a href="' + esc(stDocLinks[drv].url) + '" target="_blank" rel="noopener">📘 ' + esc(stDocLinks[drv].label) + ' ↗</a></p>' : '')
           + '<p class="hint" id="stSrc_' + drv + '">Sumber aktif: <b>' + stSrcTxt(stat.source) + '</b> — kesiapan: ' + (stat.ready ? '<span style="color:var(--ok);">✓ lengkap</span>' : '<span style="color:var(--warn);">belum lengkap</span>') + '</p>'
           + '<div class="stack gap-14 mt-16">' + rows + '</div>'
           + (canEdit ? '<div class="row gap-12 mt-12"><button class="btn btn-primary btn-sm st-cred-save" data-drv="' + drv + '">Simpan Kredensial</button><button class="btn btn-soft btn-sm st-cred-del" data-drv="' + drv + '">Hapus yang tersimpan</button></div>' : '')
@@ -2731,12 +2733,29 @@
         + '</div>'
         + credSections;
 
-      /* ---------- Kartu migrasi file lama (mirror massal) ---------- */
+      /* ---------- Kartu migrasi file lama: manual + otomatis ---------- */
+      var amRes = null;
+      try { amRes = await SIKAPI.get('/storage/automig'); } catch(_){}
+      var am = (amRes && amRes.data) || { enabled: false, batch: 10, intervalSecs: 30, done: 0, ok: 0, failedCount: 0, total: 0, lastRun: null, lastErr: null };
       var migrateCard =
         '<div class="card card-pad" id="stMigrateCard" style="display:' + (['local','cdn'].includes(st.driver) ? 'none' : 'block') + ';margin-bottom:16px;">'
         + '<h3 class="display-s">Migrasi file lama ke driver aktif</h3>'
-        + '<p class="small muted mt-8">File yang diunggah sebelum driver ini aktif belum tersalin ke layanan remote. Kirim ulang per berkas atau massal (maks 100 sekaligus). Penyimpanan lokal tidak pernah diubah — mirror murni tambahan.</p>'
-        + '<div class="row gap-12 mt-12" style="align-items:center;">'
+        + '<p class="small muted mt-8">File yang diunggah sebelum driver ini aktif belum tersalin ke layanan remote. Kirim manual per berkas/massal (maks 100), atau aktifkan <b>migrasi otomatis</b> yang berjalan bertahap di latar belakang. Penyimpanan lokal tidak pernah diubah — mirror murni tambahan.</p>'
+        + '<div class="grid-2 mt-12">'
+        + '<div class="field"><label>Migrasi otomatis (latar belakang)</label>'
+        + '<div class="input-shell"><select id="stAmEnabled" ' + (canEdit ? '' : 'disabled') + '>'
+        + '<option value="0"' + (!am.enabled ? ' selected' : '') + '>Nonaktif</option>'
+        + '<option value="1"' + (am.enabled ? ' selected' : '') + '>Aktif — kirim otomatis bertahap</option>'
+        + '</select></div></div>'
+        + '<div class="field"><label>Ukuran batch &amp; interval</label>'
+        + '<div class="row gap-8"><div class="input-shell" style="flex:1;"><input id="stAmBatch" type="number" min="1" max="100" value="' + (am.batch || 10) + '" title="berkas per langkah" ' + (canEdit ? '' : 'disabled') + '></div>'
+        + '<div class="input-shell" style="flex:1;"><input id="stAmInt" type="number" min="10" max="3600" value="' + (am.intervalSecs || 30) + '" title="detik antar langkah" ' + (canEdit ? '' : 'disabled') + '></div></div>'
+        + '<span class="hint">Kiri: berkas per langkah (1–100) · Kanan: detik antar langkah (10–3600).</span></div>'
+        + '</div>'
+        + '<p class="hint mt-8" id="stAmProg">Progres: ' + (am.done || 0) + ' tersalin' + (am.total ? ' dari ' + am.total + ' berkas' : '') + ' · gagal ' + (am.failedCount || 0) + (am.lastRun ? ' · terakhir jalan: ' + esc(String(am.lastRun).replace('T', ' ').slice(0, 19)) : '') + '</p>'
+        + (am.lastErr ? '<p class="hint" style="color:var(--warn);">Catatan terakhir: ' + esc(am.lastErr) + '</p>' : '')
+        + (canEdit ? '<div class="row gap-12 mt-8"><button class="btn btn-primary btn-sm" id="stAmSave">Simpan Migrasi Otomatis</button><button class="btn btn-soft btn-sm" id="stAmRun">Jalankan satu langkah sekarang</button></div>' : '')
+        + '<div class="row gap-12 mt-16" style="align-items:center;">'
         + '<button class="btn btn-soft btn-sm" id="stMigRefresh">Muat daftar berkas</button>'
         + '<label class="small"><input type="checkbox" id="stMigAll"> Pilih semua</label>'
         + '<button class="btn btn-primary btn-sm" id="stMigSend" disabled>Kirim terpilih</button>'
@@ -3119,9 +3138,13 @@
             var r = await SIKAPI.get('/storage/files?limit=500');
             var d = (r && r.data) || { files: [], total: 0 };
             stMigFiles = d.files || [];
-            info.textContent = d.total + ' berkas lokal (ditampilkan ' + stMigFiles.length + ').';
+            var belum = stMigFiles.filter(function(f){ return !f.mirrored; }).length;
+            info.textContent = d.total + ' berkas lokal — ' + belum + ' belum tersalin.';
             list.innerHTML = stMigFiles.map(function(f){
-              return '<label class="small" style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);"><input type="checkbox" class="st-mig-chk" data-rel="' + esc(f.rel) + '"> <span style="flex:1;word-break:break-all;">' + esc(f.rel) + '</span> <span class="hint">' + Math.ceil(f.size/1024) + ' KB</span></label>';
+              var cek = f.mirrored
+                ? '<span class="hint" style="color:var(--ok);white-space:nowrap;">✓ tersalin</span>'
+                : '<input type="checkbox" class="st-mig-chk" data-rel="' + esc(f.rel) + '">';
+              return '<label class="small" style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);">' + cek + ' <span style="flex:1;word-break:break-all;">' + esc(f.rel) + '</span> <span class="hint">' + Math.ceil(f.size/1024) + ' KB</span></label>';
             }).join('') || '<p class="hint" style="padding:10px;">Tidak ada berkas.</p>';
             document.getElementById('stMigSend').disabled = false;
           } catch(e){ info.textContent = e.message; }
@@ -3144,6 +3167,34 @@
             showToast((r.ok || 0) + '/' + (r.total || 0) + ' berkas berhasil di-mirror ke ' + r.driver + '.', r.ok === r.total ? 'success' : 'danger');
           } catch(e){ showToast(e.message, 'danger'); }
           migSend.disabled = false;
+        };
+      }
+
+      /* ---------- Migrasi otomatis: simpan pengaturan & jalan satu langkah ---------- */
+      var amSaveBtn = document.getElementById('stAmSave');
+      if(amSaveBtn){
+        amSaveBtn.onclick = async function(){
+          try {
+            await SIKAPI.put('/storage/automig', {
+              enabled: document.getElementById('stAmEnabled').value === '1',
+              batch: parseInt(document.getElementById('stAmBatch').value, 10),
+              intervalSecs: parseInt(document.getElementById('stAmInt').value, 10)
+            });
+            showToast('Migrasi otomatis disimpan — berjalan bertahap di latar belakang.', 'success');
+          } catch(e){ showToast(e.message, 'danger'); }
+        };
+      }
+      var amRunBtn = document.getElementById('stAmRun');
+      if(amRunBtn){
+        amRunBtn.onclick = async function(){
+          amRunBtn.disabled = true;
+          try {
+            var r = await SIKAPI.post('/storage/automig-run', {});
+            var x = r.result || {};
+            if(x.ok) showToast('Batch: ' + x.okN + '/' + x.batch + ' berhasil — total tersalin ' + x.done + '.', x.okN === x.batch ? 'success' : 'danger');
+            else showToast(x.reason ? 'Dilewati: ' + x.reason : (x.error || 'Tidak ada yang dikerjakan.'), 'danger');
+          } catch(e){ showToast(e.message, 'danger'); }
+          amRunBtn.disabled = false;
         };
       }
 
