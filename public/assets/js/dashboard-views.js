@@ -2674,16 +2674,42 @@
         + (!bzRes ? '<p class="hint mt-8">Backend belum mendukung modul beban sistem — perbarui server ke versi terbaru.</p>' : '')
         + '</div>';
 
-      /* ---------- Kartu penyimpanan uploads (multi-driver) ---------- */
+      /* ---------- Kartu penyimpanan uploads (multi-driver + kredensial) ---------- */
       var stRes = null;
       try { stRes = await SIKAPI.get('/storage'); } catch(_){}
-      var st = (stRes && stRes.data) || { driver: 'local', cdnBase: '', envReady: {} };
-      var stEnvNames = { cloudinary: 'CLOUDINARY_CLOUD/KEY/SECRET', supabase: 'SUPABASE_URL/SERVICE_KEY', gdrive: 'GDRIVE_CLIENT_ID/SECRET/REFRESH_TOKEN' };
-      var stEnvTxt = Object.keys(stEnvNames).map(function(k){ return k + ': ' + ((st.envReady || {})[k] ? '✓ siap' : '— env belum diisi (' + stEnvNames[k] + ')'); }).join(' · ');
+      var st = (stRes && stRes.data) || { driver: 'local', cdnBase: '', credStatus: {} };
+      var cs = st.credStatus || {};
+      var stLabels = {
+        cloudinary: { judul: 'Cloudinary', fields: { cloud: ['Cloud name', false], key: ['API Key', true], secret: ['API Secret', true] } },
+        supabase:   { judul: 'Supabase Storage', fields: { url: ['Project URL', false], service_key: ['Service role key', true], bucket: ['Bucket (kosong = sikeda)', false] } },
+        gdrive:     { judul: 'Google Drive', fields: { client_id: ['Client ID', false], client_secret: ['Client secret', true], refresh_token: ['Refresh token', true], folder_id: ['Folder ID (kosong = root)', false] } }
+      };
+      function stSrcTxt(src){ return src === 'env' ? 'environment variables (menang atas dashboard)' : src === 'db' ? 'dashboard — tersimpan terenkripsi di database' : src === 'mixed' ? 'campuran env + dashboard' : 'belum ada kredensial'; }
+      var stSummary =
+        '<p class="hint mt-8" id="stSummary">Kesiapan kredensial — ' + Object.keys(stLabels).map(function(drv){
+          var s2 = cs[drv] || { ready: false, source: null };
+          return stLabels[drv].judul + ': ' + (s2.ready ? '<span style="color:var(--ok);">✓ siap</span>' : '<span style="color:var(--warn);">belum lengkap</span>') + ' (' + (s2.source === 'env' ? 'env' : s2.source === 'db' ? 'dashboard' : s2.source === 'mixed' ? 'env+dashboard' : 'kosong') + ')';
+        }).join(' · ') + '</p>';
+      var credSections = Object.keys(stLabels).map(function(drv){
+        var L = stLabels[drv];
+        var stat = cs[drv] || { ready: false, source: null, fields: {} };
+        var rows = Object.keys(L.fields).map(function(f){
+          var meta = L.fields[f];
+          var fs2 = (stat.fields || {})[f] || { set: false, src: null };
+          return '<div class="field"><label>' + meta[0] + (fs2.set ? ' <span class="hint" style="display:inline;">— terisi (' + (fs2.src === 'env' ? 'env' : 'dashboard') + ')</span>' : '') + '</label>'
+            + '<div class="input-shell"><input id="stc_' + drv + '_' + f + '" type="' + (meta[1] ? 'password' : 'text') + '" autocomplete="off" spellcheck="false" placeholder="' + (fs2.set ? '••••••••  terisi — kosongkan untuk mempertahankan nilai lama' : 'belum diisi') + '" ' + (canEdit ? '' : 'disabled') + '></div></div>';
+        }).join('');
+        return '<div class="card card-pad" id="stCred_' + drv + '" style="margin-top:12px;display:' + (st.driver === drv ? 'block' : 'none') + ';">'
+          + '<h4 style="margin:0 0 6px;font-size:.92rem;">Kesiapan kredensial — ' + L.judul + '</h4>'
+          + '<p class="hint" id="stSrc_' + drv + '">Sumber aktif: <b>' + stSrcTxt(stat.source) + '</b> — kesiapan: ' + (stat.ready ? '<span style="color:var(--ok);">✓ lengkap</span>' : '<span style="color:var(--warn);">belum lengkap</span>') + '</p>'
+          + '<div class="stack gap-14 mt-16">' + rows + '</div>'
+          + (canEdit ? '<div class="row gap-12 mt-12"><button class="btn btn-primary btn-sm st-cred-save" data-drv="' + drv + '">Simpan Kredensial</button><button class="btn btn-soft btn-sm st-cred-del" data-drv="' + drv + '">Hapus yang tersimpan</button></div>' : '')
+          + '</div>';
+      }).join('');
       var storageCard =
         '<div class="card card-pad" style="margin-bottom:16px;">'
         + '<h3 class="display-s">Penyimpanan file uploads</h3>'
-        + '<p class="small muted mt-8">Folder server bawaan selalu aktif sebagai fallback — instalasi pertama tanpa konfigurasi tetap berjalan normal. Driver remote mengarahkan pembacaan (redirect ke CDN) dan menyalin file baru ke layanan penyimpanan gratis. Kredensial diisi lewat environment variables, bukan di sini.</p>'
+        + '<p class="small muted mt-8">Folder server bawaan selalu aktif sebagai fallback — instalasi pertama tanpa konfigurasi tetap berjalan normal. Driver remote mengarahkan pembacaan (redirect ke CDN) dan menyalin file baru ke layanan penyimpanan gratis. Kredensial bisa diisi di seksi sesuai driver (tersimpan terenkripsi), atau lewat environment variables yang selalu menang.</p>'
         + '<div class="grid-2 mt-16">'
         + '<div class="field"><label>Driver penyimpanan</label>'
         + '<div class="input-shell"><select id="stStorage" ' + (canEdit ? '' : 'disabled') + '>'
@@ -2697,10 +2723,11 @@
         + '<div class="input-shell"><input id="stCdnBase" placeholder="https://cdn.contoh.com" value="' + esc(st.cdnBase || '') + '" ' + (canEdit ? '' : 'disabled') + '></div>'
         + '<span class="hint">Dipakai driver CDN kustom &amp; Google Drive untuk membentuk URL publik berkas.</span></div>'
         + '</div>'
-        + '<p class="hint">Kesiapan kredensial env — ' + esc(stEnvTxt) + '</p>'
+        + stSummary
         + (canEdit ? '<div class="row gap-12 mt-12"><button class="btn btn-primary btn-sm" id="stStorageSave">Simpan Penyimpanan</button><button class="btn btn-soft btn-sm" id="stStorageTest">Uji Simpan &amp; Baca</button></div>' : '')
         + (!stRes ? '<p class="hint mt-8">Backend belum mendukung modul penyimpanan — perbarui server ke versi terbaru.</p>' : '')
-        + '</div>';
+        + '</div>'
+        + credSections;
 
       host.innerHTML = stickyBar
         + heroCard
@@ -2949,21 +2976,93 @@
         p.style.backgroundImage = 'url("' + bgVal + '")';
       })();
 
-      /* ---------- Penyimpanan uploads: driver, uji, simpan ---------- */
+      /* ---------- Penyimpanan uploads: driver, kredensial, uji, simpan ---------- */
       var stSel = document.getElementById('stStorage');
       if(stSel){
         var stWrap = document.getElementById('stCdnWrap');
-        stSel.onchange = function(){ if(stWrap) stWrap.style.display = (stSel.value === 'cdn' || stSel.value === 'gdrive') ? 'block' : 'none'; };
+        stSel.onchange = function(){
+          if(stWrap) stWrap.style.display = (stSel.value === 'cdn' || stSel.value === 'gdrive') ? 'block' : 'none';
+          ['cloudinary','supabase','gdrive'].forEach(function(drv){
+            var el = document.getElementById('stCred_' + drv);
+            if(el) el.style.display = stSel.value === drv ? 'block' : 'none';
+          });
+        };
+      }
+      /* Kumpulkan field kredensial driver aktif yang terisi (tanpa nilai bullet) */
+      function stCollectCreds(drv){
+        var out = {};
+        Object.keys(stLabels[drv].fields).forEach(function(f){
+          var el = document.getElementById('stc_' + drv + '_' + f);
+          var v = el && el.value ? String(el.value).trim() : '';
+          if(v && !/^[•\u2022]+$/.test(v)) out[f] = v;
+        });
+        return out;
+      }
+      async function stRefreshStatus(){
+        try {
+          var r2 = await SIKAPI.get('/storage');
+          var d2 = (r2 && r2.data) || {};
+          var cs2 = d2.credStatus || {};
+          Object.keys(stLabels).forEach(function(drv){
+            var stat = cs2[drv] || { ready: false, source: null, fields: {} };
+            var srcEl = document.getElementById('stSrc_' + drv);
+            if(srcEl) srcEl.innerHTML = 'Sumber aktif: <b>' + stSrcTxt(stat.source) + '</b> — kesiapan: ' + (stat.ready ? '<span style="color:var(--ok);">✓ lengkap</span>' : '<span style="color:var(--warn);">belum lengkap</span>');
+            Object.keys(stLabels[drv].fields).forEach(function(f){
+              var el = document.getElementById('stc_' + drv + '_' + f);
+              var fs2 = (stat.fields || {})[f] || { set: false };
+              if(el && fs2.set){ el.placeholder = '••••••••  terisi — kosongkan untuk mempertahankan nilai lama'; }
+            });
+          });
+          var sumEl = document.getElementById('stSummary');
+          if(sumEl) sumEl.innerHTML = 'Kesiapan kredensial — ' + Object.keys(stLabels).map(function(drv){
+            var s2 = cs2[drv] || { ready: false, source: null };
+            return stLabels[drv].judul + ': ' + (s2.ready ? '<span style="color:var(--ok);">✓ siap</span>' : '<span style="color:var(--warn);">belum lengkap</span>') + ' (' + (s2.source === 'env' ? 'env' : s2.source === 'db' ? 'dashboard' : s2.source === 'mixed' ? 'env+dashboard' : 'kosong') + ')';
+          }).join(' · ');
+        } catch(_){ }
       }
       var stSave2 = document.getElementById('stStorageSave');
       if(stSave2){
         stSave2.onclick = async function(){
           try {
-            await SIKAPI.put('/storage', { driver: document.getElementById('stStorage').value, cdnBase: (document.getElementById('stCdnBase') || {}).value || '' });
+            var drv = document.getElementById('stStorage').value;
+            var body = { driver: drv, cdnBase: (document.getElementById('stCdnBase') || {}).value || '' };
+            if(stLabels[drv]){
+              var cr = stCollectCreds(drv);
+              if(Object.keys(cr).length) body.creds = cr;
+            }
+            await SIKAPI.put('/storage', body);
             showToast('Konfigurasi penyimpanan disimpan.', 'success');
+            if(body.creds){
+              Object.keys(body.creds).forEach(function(f){ var el = document.getElementById('stc_' + drv + '_' + f); if(el) el.value = ''; });
+              await stRefreshStatus();
+            }
           } catch(e){ showToast(e.message, 'danger'); }
         };
       }
+      Array.prototype.forEach.call(document.querySelectorAll('.st-cred-save'), function(btn){
+        btn.onclick = async function(){
+          var drv = btn.getAttribute('data-drv');
+          try {
+            var cr = stCollectCreds(drv);
+            if(!Object.keys(cr).length){ showToast('Tidak ada kredensial baru untuk disimpan.', 'danger'); return; }
+            await SIKAPI.put('/storage', { driver: document.getElementById('stStorage').value, creds: cr });
+            Object.keys(cr).forEach(function(f){ var el = document.getElementById('stc_' + drv + '_' + f); if(el) el.value = ''; });
+            showToast('Kredensial ' + stLabels[drv].judul + ' disimpan terenkripsi.', 'success');
+            await stRefreshStatus();
+          } catch(e){ showToast(e.message, 'danger'); }
+        };
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('.st-cred-del'), function(btn){
+        btn.onclick = async function(){
+          var drv = btn.getAttribute('data-drv');
+          if(!confirm('Hapus kredensial ' + stLabels[drv].judul + ' yang tersimpan di database?')) return;
+          try {
+            await SIKAPI.del('/storage/creds?driver=' + drv);
+            showToast('Kredensial ' + stLabels[drv].judul + ' dihapus.', 'success');
+            await stRefreshStatus();
+          } catch(e){ showToast(e.message, 'danger'); }
+        };
+      });
       var stTestBtn = document.getElementById('stStorageTest');
       if(stTestBtn){
         stTestBtn.onclick = async function(){

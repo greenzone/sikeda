@@ -2124,21 +2124,19 @@ router.delete('/kta-presets/:id', requireRole('superadmin'), async (req, res) =>
 
 /* ============================================================
    Penyimpanan uploads — multi-driver (lokal + mirror remote gratis)
-   GET  /api/storage       → status driver aktif & kesiapan env
-   PUT  /api/storage       → superadmin: pilih driver + CDN base
-   POST /api/storage/test  → superadmin: uji tulis+hapus berkas uji
+   GET    /api/storage         → status driver, CDN base, status kredensial per field
+   PUT    /api/storage         → superadmin: pilih driver + CDN base + simpan kredensial
+   DELETE /api/storage/creds   → superadmin: hapus kredensial tersimpan satu driver
+   POST   /api/storage/test    → superadmin: uji tulis+hapus berkas uji
+   Kredensial di DB disimpan TERENKRIPSI (AES-256-GCM) dan tidak pernah
+   dikembalikan ke klien — hanya status {set, sumber} per field.
    ============================================================ */
 router.get('/storage', requireRole('admin','superadmin'), async (req, res) => {
   try {
-    const envReady = {
-      cloudinary: !!(process.env.CLOUDINARY_CLOUD && process.env.CLOUDINARY_KEY && process.env.CLOUDINARY_SECRET),
-      supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
-      gdrive: !!(process.env.GDRIVE_CLIENT_ID && process.env.GDRIVE_CLIENT_SECRET && process.env.GDRIVE_REFRESH_TOKEN)
-    };
     res.json({ ok: true, data: {
       driver: await storage.driver(),
       cdnBase: await storage.cdnBase(),
-      envReady,
+      credStatus: await storage.credStatus(),
       canEdit: req.user.level === 'superadmin'
     } });
   } catch(e){ res.status(500).json({ error: 'Gagal membaca konfigurasi penyimpanan.' }); }
@@ -2154,9 +2152,32 @@ router.put('/storage', requireRole('superadmin'), async (req, res) => {
     await q(`INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, ['storage_driver', d]);
     await q(`INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`, ['storage_cdn_base', baseIn.slice(0, 200)]);
     storage.setDriver(d); storage.setCdnBase(baseIn);
-    await logAct(req.user, 'Ubah penyimpanan uploads', 'driver=' + d);
-    res.json({ ok: true, driver: d });
+    /* Kredensial per driver (opsional): hanya field terisi yang disimpan */
+    let savedCreds = 0;
+    if(b.creds && typeof b.creds === 'object' && storage.CREDS_FIELDS[d]){
+      const partial = {};
+      for(const f of Object.keys(storage.CREDS_FIELDS[d])){
+        const v = b.creds[f];
+        if(v !== undefined && String(v).trim() !== '' && !/^[•\u2022]+$/.test(String(v).trim())) partial[f] = String(v).trim().slice(0, 500);
+      }
+      if(Object.keys(partial).length){
+        await storage.saveCreds(d, partial);
+        savedCreds = Object.keys(partial).length;
+      }
+    }
+    await logAct(req.user, 'Ubah penyimpanan uploads', 'driver=' + d + (savedCreds ? ', kredensial=' + savedCreds + ' field' : ''));
+    res.json({ ok: true, driver: d, savedCreds, credStatus: await storage.credStatus() });
   } catch(e){ res.status(500).json({ error: 'Gagal menyimpan konfigurasi penyimpanan.' }); }
+});
+
+router.delete('/storage/creds', requireRole('superadmin'), async (req, res) => {
+  try {
+    const d = String(req.query.driver || '').trim().toLowerCase();
+    if(!storage.CREDS_FIELDS[d]) return res.status(400).json({ error: 'Driver tidak mendukung kredensial tersimpan.' });
+    await storage.saveCreds(d, null);
+    await logAct(req.user, 'Hapus kredensial penyimpanan', d);
+    res.json({ ok: true, driver: d, credStatus: await storage.credStatus() });
+  } catch(e){ res.status(500).json({ error: 'Gagal menghapus kredensial.' }); }
 });
 
 router.post('/storage/test', requireRole('superadmin'), async (req, res) => {
