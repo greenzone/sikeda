@@ -34,7 +34,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { uploadsRoot } = require('./uploads-path');
 
-const DRIVERS = ['local', 'cdn', 'cloudinary', 'supabase', 'gdrive'];
+const DRIVERS = ['local', 'cdn', 'cloudinary', 'supabase', 'gdrive', 's3'];
 
 /* ---------- Definisi field kredensial per driver ---------- */
 const CREDS_FIELDS = {
@@ -53,12 +53,20 @@ const CREDS_FIELDS = {
     client_secret: { secret: true,  required: true },
     refresh_token: { secret: true,  required: true },
     folder_id:     { secret: false, required: false }
+  },
+  s3: {
+    endpoint:   { secret: false, required: true },
+    region:     { secret: false, required: true },
+    access_key: { secret: false, required: true },
+    secret_key: { secret: true,  required: true },
+    bucket:     { secret: false, required: true }
   }
 };
 const ENV_MAP = {
   cloudinary: { cloud: 'CLOUDINARY_CLOUD', key: 'CLOUDINARY_KEY', secret: 'CLOUDINARY_SECRET' },
   supabase:   { url: 'SUPABASE_URL', service_key: 'SUPABASE_SERVICE_KEY', bucket: 'SUPABASE_BUCKET' },
-  gdrive:     { client_id: 'GDRIVE_CLIENT_ID', client_secret: 'GDRIVE_CLIENT_SECRET', refresh_token: 'GDRIVE_REFRESH_TOKEN', folder_id: 'GDRIVE_FOLDER_ID' }
+  gdrive:     { client_id: 'GDRIVE_CLIENT_ID', client_secret: 'GDRIVE_CLIENT_SECRET', refresh_token: 'GDRIVE_REFRESH_TOKEN', folder_id: 'GDRIVE_FOLDER_ID' },
+  s3:         { endpoint: 'S3_ENDPOINT', region: 'S3_REGION', access_key: 'S3_ACCESS_KEY', secret_key: 'S3_SECRET_KEY', bucket: 'S3_BUCKET' }
 };
 
 /* ---------- Resolusi driver & CDN base (env > settings DB) ---------- */
@@ -204,6 +212,16 @@ async function gdriveCfg(){
     folderId:     process.env.GDRIVE_FOLDER_ID     || db.folder_id     || ''
   };
 }
+async function s3Cfg(){
+  const db = (await loadCreds()).s3 || {};
+  return {
+    endpoint:  (process.env.S3_ENDPOINT || db.endpoint || '').replace(/\/+$/, ''),
+    region:    process.env.S3_REGION    || db.region    || 'us-east-1',
+    accessKey: process.env.S3_ACCESS_KEY || db.access_key || '',
+    secretKey: process.env.S3_SECRET_KEY || db.secret_key || '',
+    bucket:    process.env.S3_BUCKET    || db.bucket    || ''
+  };
+}
 
 /* ---------- URL publik untuk rel 'uploads/…' (null = dilayani lokal) ---------- */
 async function publicUrl(rel){
@@ -225,6 +243,10 @@ async function publicUrl(rel){
     const c = await supaCfg();
     return c.url ? c.url.replace(/\/+$/, '') + '/storage/v1/object/public/' + c.bucket + '/' + r : null;
   }
+  if(d === 's3'){
+    const c = await s3Cfg();
+    return (c.endpoint && c.bucket) ? c.endpoint + '/' + c.bucket + '/' + r : null;
+  }
   /* gdrive: drive bukan CDN — hanya bila CDN base diisi */
   const b = await cdnBase();
   return b ? b + '/' + r : null;
@@ -244,7 +266,7 @@ async function writeFile(rel, buf){
   }
   const d = await driver();
   if(d === 'local' || d === 'cdn') return { ok: true };
-  const mirror = d === 'cloudinary' ? upCloudinary : d === 'supabase' ? upSupabase : upGdrive;
+  const mirror = d === 'cloudinary' ? upCloudinary : d === 'supabase' ? upSupabase : d === 's3' ? upS3 : upGdrive;
   try {
     await mirror(rel, buf);
     return { ok: true };
@@ -275,6 +297,11 @@ async function removeFile(rel){
     } else if(d === 'supabase'){
       const c = await supaCfg();
       if(c.url && c.serviceKey) await fetch(c.url.replace(/\/+$/, '') + '/storage/v1/object/' + c.bucket + '/' + r, { method: 'DELETE', headers: { Authorization: 'Bearer ' + c.serviceKey } }).catch(() => {});
+    } else if(d === 's3'){
+      const c = await s3Cfg();
+      if(c.endpoint && c.accessKey && c.secretKey && c.bucket){
+        await s3Request('DELETE', c, '/' + r, '', {}).catch(() => {});
+      }
     }
   } catch(_){ /* best effort */ }
 }
@@ -321,6 +348,48 @@ async function gToken(){
   return _gTok.t;
 }
 
+/* ---------- S3 / Backblaze B2 (kompatibel S3, SigV4 murni tanpa dependensi) ---------- */
+function s3Hmac(key, data){ return crypto.createHmac('sha256', key).update(data).digest(); }
+function s3Sha256hex(data){ return crypto.createHash('sha256').update(data).digest('hex'); }
+
+/* method PUT/DELETE, key diawali '/', payload Buffer/string, extraHeaders ikut ditandatangani */
+async function s3Request(method, c, key, payload, extraHeaders){
+  const url = new URL(c.endpoint);
+  const host = url.host;
+  const canonicalUri = '/' + c.bucket + key.split('/').map(encodeURIComponent).join('/');
+  const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const payloadHash = s3Sha256hex(payload || '');
+  const headers = Object.assign({
+    host,
+    'x-amz-content-sha256': payloadHash,
+    'x-amz-date': amzDate
+  }, extraHeaders || {});
+  const hNames = Object.keys(headers).map(h => h.toLowerCase()).sort();
+  const canonicalHeaders = hNames.map(h => {
+    const orig = Object.keys(headers).find(k => k.toLowerCase() === h);
+    return h + ':' + String(headers[orig]).trim().replace(/\s+/g, ' ');
+  }).join('\n') + '\n';
+  const signedHeaders = hNames.join(';');
+  const canonicalRequest = [method, canonicalUri, '', canonicalHeaders, signedHeaders, payloadHash].join('\n');
+  const scope = dateStamp + '/' + c.region + '/s3/aws4_request';
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, s3Sha256hex(canonicalRequest)].join('\n');
+  const kSigning = s3Hmac(s3Hmac(s3Hmac(s3Hmac('AWS4' + c.secretKey, dateStamp), c.region), 's3'), 'aws4_request');
+  const signature = crypto.createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+  const auth = 'AWS4-HMAC-SHA256 Credential=' + c.accessKey + '/' + scope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
+  const fetchHeaders = Object.assign({}, headers, { Authorization: auth });
+  delete fetchHeaders.host; /* fetch menyetel Host dari URL — nilainya sama */
+  const resp = await fetch(url.origin + canonicalUri, { method, headers: fetchHeaders, body: method === 'PUT' ? payload : undefined });
+  if(!resp.ok) throw new Error('S3 ' + resp.status + ': ' + (await resp.text()).slice(0, 140));
+  return resp;
+}
+
+async function upS3(rel, buf){
+  const c = await s3Cfg();
+  if(!c.endpoint || !c.accessKey || !c.secretKey || !c.bucket) throw new Error('Kredensial S3/B2 belum lengkap (ENV atau dashboard).');
+  await s3Request('PUT', c, '/' + rel, buf, { 'Content-Type': 'application/octet-stream' });
+}
+
 async function upGdrive(rel, buf){
   const c = await gdriveCfg();
   const tok = await gToken();
@@ -359,4 +428,4 @@ function serveUploads(req, res, next){
   });
 }
 
-module.exports = { DRIVERS, driver, setDriver, setCdnBase, cdnBase, publicUrl, writeFile, removeFile, serveUploads, CREDS_FIELDS, ENV_MAP, credStatus, loadCreds, saveCreds, ensureCredsTable, cloudCfg, supaCfg, gdriveCfg };
+module.exports = { DRIVERS, driver, setDriver, setCdnBase, cdnBase, publicUrl, writeFile, removeFile, serveUploads, CREDS_FIELDS, ENV_MAP, credStatus, loadCreds, saveCreds, ensureCredsTable, cloudCfg, supaCfg, gdriveCfg, s3Cfg, s3Request };

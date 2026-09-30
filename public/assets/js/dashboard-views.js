@@ -2682,7 +2682,8 @@
       var stLabels = {
         cloudinary: { judul: 'Cloudinary', fields: { cloud: ['Cloud name', false], key: ['API Key', true], secret: ['API Secret', true] } },
         supabase:   { judul: 'Supabase Storage', fields: { url: ['Project URL', false], service_key: ['Service role key', true], bucket: ['Bucket (kosong = sikeda)', false] } },
-        gdrive:     { judul: 'Google Drive', fields: { client_id: ['Client ID', false], client_secret: ['Client secret', true], refresh_token: ['Refresh token', true], folder_id: ['Folder ID (kosong = root)', false] } }
+        gdrive:     { judul: 'Google Drive', fields: { client_id: ['Client ID', false], client_secret: ['Client secret', true], refresh_token: ['Refresh token', true], folder_id: ['Folder ID (kosong = root)', false] } },
+        s3:         { judul: 'S3 / Backblaze B2', fields: { endpoint: ['Endpoint (https://…)', false], region: ['Region (mis. us-east-1)', false], access_key: ['Access Key ID', false], secret_key: ['Secret Access Key', true], bucket: ['Nama bucket', false] } }
       };
       function stSrcTxt(src){ return src === 'env' ? 'environment variables (menang atas dashboard)' : src === 'db' ? 'dashboard — tersimpan terenkripsi di database' : src === 'mixed' ? 'campuran env + dashboard' : 'belum ada kredensial'; }
       var stSummary =
@@ -2718,6 +2719,7 @@
         + '<option value="cloudinary"' + (st.driver === 'cloudinary' ? ' selected' : '') + '>Cloudinary — 25 GB gratis</option>'
         + '<option value="supabase"' + (st.driver === 'supabase' ? ' selected' : '') + '>Supabase Storage — 1 GB gratis</option>'
         + '<option value="gdrive"' + (st.driver === 'gdrive' ? ' selected' : '') + '>Google Drive — 15 GB gratis</option>'
+        + '<option value="s3"' + (st.driver === 's3' ? ' selected' : '') + '>S3 / Backblaze B2 — 10 GB gratis</option>'
         + '</select></div></div>'
         + '<div class="field" id="stCdnWrap" style="display:' + (st.driver === 'cdn' || st.driver === 'gdrive' ? 'block' : 'none') + ';"><label>CDN base URL (https://…)</label>'
         + '<div class="input-shell"><input id="stCdnBase" placeholder="https://cdn.contoh.com" value="' + esc(st.cdnBase || '') + '" ' + (canEdit ? '' : 'disabled') + '></div>'
