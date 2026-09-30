@@ -2731,6 +2731,27 @@
         + '</div>'
         + credSections;
 
+      /* ---------- Kartu migrasi file lama (mirror massal) ---------- */
+      var migrateCard =
+        '<div class="card card-pad" id="stMigrateCard" style="display:' + (['local','cdn'].includes(st.driver) ? 'none' : 'block') + ';margin-bottom:16px;">'
+        + '<h3 class="display-s">Migrasi file lama ke driver aktif</h3>'
+        + '<p class="small muted mt-8">File yang diunggah sebelum driver ini aktif belum tersalin ke layanan remote. Kirim ulang per berkas atau massal (maks 100 sekaligus). Penyimpanan lokal tidak pernah diubah — mirror murni tambahan.</p>'
+        + '<div class="row gap-12 mt-12" style="align-items:center;">'
+        + '<button class="btn btn-soft btn-sm" id="stMigRefresh">Muat daftar berkas</button>'
+        + '<label class="small"><input type="checkbox" id="stMigAll"> Pilih semua</label>'
+        + '<button class="btn btn-primary btn-sm" id="stMigSend" disabled>Kirim terpilih</button>'
+        + '<span class="hint" id="stMigInfo"></span>'
+        + '</div>'
+        + '<div id="stMigList" class="mt-12" style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;"></div>'
+        + '</div>';
+
+      host.innerHTML = stickyBar
+        + heroCard
+        + storageCard
+        + migrateCard
+        + bzCard
+        + '<div class="grid-2">'
+
       host.innerHTML = stickyBar
         + heroCard
         + storageCard
@@ -2984,7 +3005,7 @@
         var stWrap = document.getElementById('stCdnWrap');
         stSel.onchange = function(){
           if(stWrap) stWrap.style.display = (stSel.value === 'cdn' || stSel.value === 'gdrive') ? 'block' : 'none';
-          ['cloudinary','supabase','gdrive'].forEach(function(drv){
+          Object.keys(stLabels).forEach(function(drv){
             var el = document.getElementById('stCred_' + drv);
             if(el) el.style.display = stSel.value === drv ? 'block' : 'none';
           });
@@ -3071,9 +3092,58 @@
           stTestBtn.disabled = true;
           try {
             var r = await SIKAPI.post('/storage/test', {});
-            showToast(r.message || ('Driver aktif: ' + (r.driver || '?')), r.remoteOk === false ? 'danger' : 'success');
+            var q2 = r.quota || {};
+            var extra = '';
+            if(q2.usage){
+              if(q2.usage.storage_bytes !== undefined){
+                var lim = q2.usage.storage_limit_bytes;
+                extra = ' — terpakai ' + (q2.usage.storage_bytes/1073741824).toFixed(2) + ' GB' + (lim ? ' / ' + (lim/1073741824).toFixed(0) + ' GB' : '');
+                if(q2.usage.files !== undefined) extra += ', ' + q2.usage.files + ' berkas';
+              } else if(q2.usage.note) extra = ' — ' + q2.usage.note;
+            } else if(q2.err) extra = ' (kuota: ' + q2.err + ')';
+            showToast((r.message || ('Driver aktif: ' + (r.driver || '?'))) + extra, r.remoteOk === false ? 'danger' : 'success');
           } catch(e){ showToast(e.message, 'danger'); }
           stTestBtn.disabled = false;
+        };
+      }
+
+      /* ---------- Migrasi file lama: muat daftar, pilih, kirim ---------- */
+      var stMigFiles = [];
+      var migRefresh = document.getElementById('stMigRefresh');
+      if(migRefresh){
+        migRefresh.onclick = async function(){
+          var info = document.getElementById('stMigInfo');
+          var list = document.getElementById('stMigList');
+          info.textContent = 'Memuat…';
+          try {
+            var r = await SIKAPI.get('/storage/files?limit=500');
+            var d = (r && r.data) || { files: [], total: 0 };
+            stMigFiles = d.files || [];
+            info.textContent = d.total + ' berkas lokal (ditampilkan ' + stMigFiles.length + ').';
+            list.innerHTML = stMigFiles.map(function(f){
+              return '<label class="small" style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);"><input type="checkbox" class="st-mig-chk" data-rel="' + esc(f.rel) + '"> <span style="flex:1;word-break:break-all;">' + esc(f.rel) + '</span> <span class="hint">' + Math.ceil(f.size/1024) + ' KB</span></label>';
+            }).join('') || '<p class="hint" style="padding:10px;">Tidak ada berkas.</p>';
+            document.getElementById('stMigSend').disabled = false;
+          } catch(e){ info.textContent = e.message; }
+        };
+      }
+      var migAll = document.getElementById('stMigAll');
+      if(migAll){
+        migAll.onchange = function(){
+          document.querySelectorAll('.st-mig-chk').forEach(function(c){ c.checked = migAll.checked; });
+        };
+      }
+      var migSend = document.getElementById('stMigSend');
+      if(migSend){
+        migSend.onclick = async function(){
+          var rels = Array.prototype.map.call(document.querySelectorAll('.st-mig-chk:checked'), function(c){ return c.getAttribute('data-rel'); });
+          if(!rels.length){ showToast('Belum ada berkas dipilih.', 'danger'); return; }
+          migSend.disabled = true;
+          try {
+            var r = await SIKAPI.post('/storage/mirror', { rel: rels });
+            showToast((r.ok || 0) + '/' + (r.total || 0) + ' berkas berhasil di-mirror ke ' + r.driver + '.', r.ok === r.total ? 'success' : 'danger');
+          } catch(e){ showToast(e.message, 'danger'); }
+          migSend.disabled = false;
         };
       }
 

@@ -2190,9 +2190,46 @@ router.post('/storage/test', requireRole('superadmin'), async (req, res) => {
     const remoteOk = (d === 'local' || d === 'cdn') ? null : !!r.ok;
     const msg = (d === 'local' || d === 'cdn')
       ? 'Penyimpanan lokal OK' + (d === 'cdn' ? ' (CDN base dipakai untuk membaca).' : '.')
-      : (remoteOk ? 'Lokal + mirror ' + d + ' OK — berkas uji tersimpan & dihapus.' : 'Lokal OK; mirror ' + d + ' GAGAL — periksa env kredensial/kuota.');
-    res.json({ ok: true, driver: d, remoteOk, message: msg });
+      : (remoteOk ? 'Lokal + mirror ' + d + ' OK — berkas uji tersimpan & dihapus.' : 'Lokal OK; mirror ' + d + ' GAGAL — periksa kredensial/kuota.');
+    const quota = await storage.driverQuota();
+    res.json({ ok: true, driver: d, remoteOk, message: msg, quota });
   } catch(e){ res.status(500).json({ error: e.message || 'Uji penyimpanan gagal.' }); }
+});
+
+/* GET /api/storage/files → daftar file lokal (superadmin; seksi migrasi file lama) */
+router.get('/storage/files', requireRole('superadmin'), async (req, res) => {
+  try {
+    const d = await storage.driver();
+    if(d === 'local' || d === 'cdn') return res.status(400).json({ error: 'Driver aktif lokal/CDN — migrasi tidak diperlukan.' });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 500, 500);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    let files = storage.listLocalFiles().filter(f => f.rel !== 'uploads/.gitkeep' && f.size > 0);
+    const total = files.length;
+    files = files.slice(offset, offset + limit).map(f => ({ rel: f.rel, size: f.size, mirrored: null }));
+    res.json({ ok: true, data: { driver: d, total, offset, limit, files } });
+  } catch(e){ res.status(500).json({ error: 'Gagal membaca daftar berkas.' }); }
+});
+
+/* POST /api/storage/mirror {rel | rel:[...]} → kirim ulang file lokal yang sudah ada
+   ke driver remote aktif (mirror murni; lokal tidak ditulis ulang). */
+router.post('/storage/mirror', requireRole('superadmin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rels = Array.isArray(b.rel) ? b.rel.map(String).slice(0, 100) : (b.rel ? [String(b.rel)] : []);
+    if(!rels.length) return res.status(400).json({ error: 'Sertakan rel (string) atau rel (array, maks 100).' });
+    const d = await storage.driver();
+    if(d === 'local' || d === 'cdn') return res.status(400).json({ error: 'Driver aktif lokal/CDN — tidak ada mirror remote.' });
+    const results = [];
+    for(const rel of rels){
+      try {
+        await storage.mirrorLocal(rel);
+        results.push({ rel, ok: true });
+      } catch(e){ results.push({ rel, ok: false, err: e.message }); }
+    }
+    const okN = results.filter(r => r.ok).length;
+    await logAct(req.user, 'Mirror berkas lama ke penyimpanan ' + d, okN + '/' + results.length + ' berkas');
+    res.json({ ok: true, driver: d, total: results.length, ok: okN, results });
+  } catch(e){ res.status(500).json({ error: e.message || 'Mirror gagal.' }); }
 });
 
 /* ============================================================

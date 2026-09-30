@@ -406,6 +406,95 @@ async function upGdrive(rel, buf){
   if(!j.id) throw new Error('GDrive upload: ' + JSON.stringify(j).slice(0, 140));
 }
 
+/* ============================================================
+   Migrasi file lama & kuota driver (untuk dashboard superadmin)
+   ============================================================ */
+/* Daftar semua file di penyimpanan lokal (rel 'uploads/…' + ukuran) */
+function listLocalFiles(){
+  const root = path.resolve(uploadsRoot());
+  const out = [];
+  (function walk(d){
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch(_){ return; }
+    for(const e of entries){
+      const full = path.join(d, e.name);
+      if(e.isDirectory()) walk(full);
+      else if(e.isFile()){
+        try { out.push({ rel: path.relative(root, full).split(path.sep).join('/'), size: fs.statSync(full).size }); } catch(_){}
+      }
+    }
+  })(root);
+  out.sort((a, b) => a.rel.localeCompare(b.rel));
+  return out;
+}
+
+/* Kirim ulang satu file lokal yang sudah ada ke driver remote aktif
+   (tanpa menulis ulang lokal — mirror murni). */
+async function mirrorLocal(rel){
+  const r = String(rel || '').replace(/^\/+/, '');
+  const root = path.resolve(uploadsRoot());
+  const full = path.resolve(root, r);
+  if(!full.startsWith(root) || !fs.existsSync(full)) throw new Error('Berkas tidak ditemukan di penyimpanan lokal.');
+  const d = await driver();
+  if(d === 'local' || d === 'cdn') throw new Error('Driver aktif lokal/CDN — tidak ada mirror remote.');
+  const buf = fs.readFileSync(full);
+  const mirror = d === 'cloudinary' ? upCloudinary : d === 'supabase' ? upSupabase : d === 's3' ? upS3 : upGdrive;
+  await mirror(r, buf);
+  return { ok: true, driver: d, size: buf.length };
+}
+
+/* Kuota & pemakaian driver remote (best effort — null bila API tak menyediakan) */
+async function driverQuota(){
+  const d = await driver();
+  const out = { driver: d, usage: null };
+  try {
+    if(d === 'cloudinary'){
+      const c = await cloudCfg();
+      if(!c.cloud || !c.key || !c.secret) return out;
+      const ts = Date.now();
+      const sig = crypto.createHash('sha1').update('timestamp=' + ts + c.secret).digest('hex');
+      const resp = await fetch('https://api.cloudinary.com/v1_1/' + c.cloud + '/usage?timestamp=' + ts + '&api_key=' + c.key + '&signature=' + sig);
+      if(!resp.ok){ out.err = 'Cloudinary usage ' + resp.status; return out; }
+      const j = await resp.json();
+      const u = { storage_bytes: (j.storage && j.storage.usage) || 0, storage_limit_bytes: 26843545600, bandwidth_bytes: (j.bandwidth && j.bandwidth.usage) || 0, bandwidth_limit_bytes: 26843545600 };
+      if(j.objects && j.objects.usage !== undefined) u.files = j.objects.usage;
+      out.usage = u;
+    } else if(d === 'supabase'){
+      const c = await supaCfg();
+      if(!c.url || !c.serviceKey) return out;
+      const resp = await fetch(c.url.replace(/\/+$/, '') + '/storage/v1/bucket', { headers: { Authorization: 'Bearer ' + c.serviceKey } });
+      if(!resp.ok){ out.err = 'Supabase buckets ' + resp.status; return out; }
+      const buckets = await resp.json().catch(() => []);
+      const b = Array.isArray(buckets) ? buckets.find(x => x.name === c.bucket) : null;
+      out.usage = {
+        exists: !!b,
+        storage_limit_bytes: 1073741824,
+        note: b ? ('bucket "' + c.bucket + '" ada — pemakaian total tidak disediakan API; batas per-file: ' + (b.file_size_limit || 'default')) : ('bucket "' + c.bucket + '" BELUM ada — buat bucket public bernama itu di Supabase')
+      };
+    } else if(d === 's3'){
+      const c = await s3Cfg();
+      if(!c.endpoint || !c.accessKey || !c.secretKey || !c.bucket) return out;
+      /* ListObjects (v1) — GET /bucket tanpa query, XML <Size> per objek */
+      const resp = await s3Request('GET', c, '/', '', {});
+      const xml = await resp.text();
+      const sizes = xml.match(/<Size>(\d+)<\/Size>/g) || [];
+      let bytes = 0;
+      for(const m of sizes) bytes += parseInt(m.replace(/\D/g, ''), 10) || 0;
+      out.usage = { storage_bytes: bytes, files: sizes.length, storage_limit_bytes: 10737418240, capped: sizes.length >= 1000, note: sizes.length >= 1000 ? 'rekap terpotong pada 1000 objek pertama' : null };
+    } else if(d === 'gdrive'){
+      const c = await gdriveCfg();
+      if(!c.clientId || !c.clientSecret || !c.refreshToken) return out;
+      const tok = await gToken();
+      const resp = await fetch('https://www.googleapis.com/drive/v3/about?fields=storageQuota', { headers: { Authorization: 'Bearer ' + tok } });
+      if(!resp.ok){ out.err = 'Drive about ' + resp.status; return out; }
+      const j = await resp.json();
+      const q2 = (j && j.storageQuota) || {};
+      out.usage = { storage_bytes: parseInt(q2.usage || '0', 10), storage_limit_bytes: parseInt(q2.limit || '0', 10), note: 'kuota seluruh Drive akun ini (bukan hanya folder SIKEDA)' };
+    }
+  } catch(e){ out.err = e.message; }
+  return out;
+}
+
 /* ---------- Middleware /uploads/* untuk server Node bawaan ---------- */
 function serveUploads(req, res, next){
   (async () => {
@@ -428,4 +517,4 @@ function serveUploads(req, res, next){
   });
 }
 
-module.exports = { DRIVERS, driver, setDriver, setCdnBase, cdnBase, publicUrl, writeFile, removeFile, serveUploads, CREDS_FIELDS, ENV_MAP, credStatus, loadCreds, saveCreds, ensureCredsTable, cloudCfg, supaCfg, gdriveCfg, s3Cfg, s3Request };
+module.exports = { DRIVERS, driver, setDriver, setCdnBase, cdnBase, publicUrl, writeFile, removeFile, serveUploads, CREDS_FIELDS, ENV_MAP, credStatus, loadCreds, saveCreds, ensureCredsTable, cloudCfg, supaCfg, gdriveCfg, s3Cfg, s3Request, listLocalFiles, mirrorLocal, driverQuota };
