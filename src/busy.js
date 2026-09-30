@@ -240,16 +240,30 @@ function setManual(on, mode){
 }
 
 /* ---------- Admin bypass: decode payload JWT (tanpa verifikasi tanda tangan —
-   bypass antrian bukan batas keamanan; verifikasi asli tetap di auth middleware) ---------- */
+   bypass antrian bukan batas keamanan; verifikasi asli tetap di auth middleware).
+   Navigasi halaman tidak membawa header Authorization, jadi admin yang sudah
+   login juga dikenali dari cookie ringan bz_lvl (dipasang saat login, dibersihkan
+   saat logout) — tetap bukan batas keamanan. ---------- */
 function isAdminReq(req){
   try {
     const m = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-    if(!m) return false;
-    const parts = m[1].split('.');
-    if(parts.length !== 3) return false;
-    const b = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(Buffer.from(b, 'base64').toString('utf8'));
-    return payload && (payload.level === 'admin' || payload.level === 'superadmin');
+    if(m){
+      const parts = m[1].split('.');
+      if(parts.length === 3){
+        const b = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(Buffer.from(b, 'base64').toString('utf8'));
+        if(payload && (payload.level === 'admin' || payload.level === 'superadmin')) return true;
+      }
+    }
+    const ck = String(req.headers.cookie || '');
+    for(const part of ck.split(';')){
+      const i = part.indexOf('=');
+      if(i > -1 && part.slice(0, i).trim() === 'bz_lvl'){
+        const v = decodeURIComponent(part.slice(i + 1).trim());
+        return v === 'admin' || v === 'superadmin';
+      }
+    }
+    return false;
   } catch(e){ return false; }
 }
 
@@ -286,6 +300,10 @@ function gate(req, res, next){
       res.set('Retry-After', '5');
       return res.status(503).json({ busy: true, retry: '/busy.html?n=' + nonce });
     }
+
+    /* Halaman browser: admin/superadmin (Bearer atau cookie bz_lvl) tetap lewat
+       supaya pengelola bisa masuk mengendalikan sistem saat antrian terbuka. */
+    if(isAdminReq(req)) return next();
 
     /* Halaman browser (dokumen HTML / clean-URL) → redirect ke antrian */
     const isPage = ACCEPT_HTML.test(String(req.headers.accept || '')) || !EXT_RE.test(url);

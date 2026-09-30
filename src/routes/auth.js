@@ -12,6 +12,20 @@ const { sikedaEmail, emailButton } = require('../mailer');
 
 const router = express.Router();
 
+/* ---------- Cookie ringan bypass antrian (BUKAN mekanisme keamanan) ----------
+   Navigasi antar halaman tidak membawa header Authorization, sehingga gerbang
+   antrian tidak bisa mengenali admin dari token. Cookie bz_lvl dipasang saat
+   login admin/superadmin (umur 9 jam = JWT_EXPIRES default) supaya pengelola
+   tetap bisa masuk mengendalikan sistem saat antrian terbuka. Verifikasi asli
+   tetap sepenuhnya di middleware auth. */
+function setBzLevelCookie(res, level){
+  res.setHeader('Set-Cookie',
+    'bz_lvl=' + encodeURIComponent(String(level)) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=32400');
+}
+function clearBzLevelCookie(res){
+  res.setHeader('Set-Cookie', 'bz_lvl=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+}
+
 /* Pastikan tabel send_log ada (pencatatan hasil kirim OTP; idempoten) */
 let sendLogReadyA = null;
 function ensureSendLogA(){
@@ -209,6 +223,7 @@ router.post('/otp/verify', async (req, res) => {
       [user.id, user.username || ('anggota#' + user.id), 'Login OTP', 'via ' + rec.channel]);
 
     const token = signToken({ sub: user.id, level: user.level });
+    if(user.level === 'admin' || user.level === 'superadmin') setBzLevelCookie(res, user.level);
     res.json({ ok: true, token, user: await safeUserWithFoto(user) });
   } catch(e){
     console.error(e);
@@ -313,6 +328,7 @@ router.post('/login', async (req, res) => {
       [user.id, user.username, 'Login panel', 'level ' + user.level]);
 
     const token = signToken({ sub: user.id, level: user.level });
+    if(user.level === 'admin' || user.level === 'superadmin') setBzLevelCookie(res, user.level);
     res.json({ ok: true, token, user: safeUser(user) });
   } catch(e){
     console.error(e);
@@ -462,12 +478,14 @@ router.get('/me', authRequired, async (req, res) => {
    Dipakai klien untuk refresh otomatis di belakang layar. */
 router.post('/refresh', authRequired, async (req, res) => {
   const token = signToken({ sub: req.user.id, level: req.user.level });
+  if(req.user.level === 'admin' || req.user.level === 'superadmin') setBzLevelCookie(res, req.user.level);
   res.json({ ok: true, token, user: safeUser(req.user) });
 });
 
 router.post('/logout', authRequired, async (req, res) => {
   await q('INSERT INTO activity_log (user_id, actor, aksi, detail) VALUES (?,?,?,?)',
     [req.user.id, req.user.username || ('user#' + req.user.id), 'Logout', '-']);
+  clearBzLevelCookie(res);
   res.json({ ok: true });
 });
 
