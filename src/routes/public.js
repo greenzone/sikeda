@@ -20,10 +20,27 @@ router.get('/branding', async (req, res) => {
       else if(r.kunci === 'site.favicon') data.favicon = r.nilai;
       else data[r.kunci] = r.nilai;
     });
+    /* Fallback default utama (folder /favicon) — klien memakai aset
+       bawaan ini bila admin belum mengunggah favicon/logo sendiri. */
+    if(!data.favicon) data.favicon_default = '/favicon/favicon.svg';
+    if(!data.logo_dashboard && !data.logo_landing) data.logo_default = '/favicon/web-app-manifest-192x192.png';
     res.json({ ok: true, data });
   } catch(e){
     console.error(e);
     res.status(500).json({ error: 'Gagal memuat branding.' });
+  }
+});
+
+/* GET /api/public/reg-fields — definisi field form pendaftaran aktif.
+   Publik (dipakai daftar.html & embed.js); tanpa data sensitif. */
+router.get('/reg-fields', async (req, res) => {
+  try {
+    const fields = await require('../regfields').loadActiveFields();
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ ok: true, data: fields });
+  } catch(e){
+    console.error(e);
+    res.status(500).json({ error: 'Gagal memuat konfigurasi form.' });
   }
 });
 

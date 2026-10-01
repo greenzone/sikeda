@@ -67,6 +67,55 @@
   var ROOT = document.getElementById('vcRoot');
   var m = null;
   var ORG = { nama:'DPD Nusantara Bersatu', wilayah:'Kabupaten Tulungagung' };
+  var CARD_TPL = { frontFields: [], backFields: [] };
+
+  /* Desain kartu aktif (menu Desain Kartu) — dimuat sekali, dipakai render & CSS override */
+  var DESIGN_PROMISE = fetch('/api/vcard/design').then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  function cardExtras(side){
+    var rows = side === 'back' ? CARD_TPL.backFields : CARD_TPL.frontFields;
+    if(!rows || !rows.length || !m) return '';
+    var ex = (m.reg_extra && typeof m.reg_extra === 'object') ? m.reg_extra : {};
+    function val(k){
+      if(k === 'nama') return m.nama;
+      if(k === 'npapg') return m.npapg || '••••••••••••••••';
+      if(k === 'nik') return m.npapg || '••••••••••••••••';
+      if(k === 'kode_unik') return m.kode_unik;
+      if(k === 'jabatan') return m.jabatan || 'Anggota';
+      if(k === 'desa') return m.desa;
+      if(k === 'kecamatan') return m.kecamatan;
+      if(k === 'wilayah') return (m.desa && m.kecamatan) ? (m.desa + ' - ' + m.kecamatan) : (m.desa || m.kecamatan || '');
+      if(k === 'org_wilayah') return ORG.wilayah;
+      if(k === 'org_nama') return ORG.nama;
+      if(k === 'status') return m.status;
+      if(k === 'whatsapp') return m.whatsapp;
+      if(k === 'email') return m.email;
+      if(k === 'telegram') return m.telegram;
+      if(k === 'pekerjaan') return m.pekerjaan;
+      if(k === 'gender') return m.gender;
+      if(k === 'tempat_lahir') return m.tempat_lahir;
+      if(k === 'tanggal_lahir') return m.tanggal_lahir ? SIK.fmtDate(String(m.tanggal_lahir).slice(0,10)) : '';
+      if(k === 'registered_at') return m.registered_at ? SIK.fmtDate(String(m.registered_at).slice(0,10)) : '';
+      if(k === 'qr_url') return m.url;
+      if(k === 'exp_label'){
+        var d0 = new Date(String(m.registered_at || '').slice(0,10) + 'T00:00:00');
+        if(isNaN(d0)) return '';
+        d0.setFullYear(d0.getFullYear() + 3);
+        return d0.toLocaleDateString('id-ID', { month:'short', year:'numeric' });
+      }
+      if(k.indexOf('reg_extra_') === 0) return ex[k] != null ? ex[k] : '';
+      return '';
+    }
+    return rows.map(function(r){
+      if(!r || !r.field) return '';
+      var v = String(val(r.field) || '').trim();
+      if(!v) return '';
+      var lbl = String(r.label || '').trim();
+      return side === 'back'
+        ? '<div class="kb-extra">' + (lbl ? '<b>' + SIK.escape(lbl) + '</b>' : '') + SIK.escape(v) + '</div>'
+        : '<div class="kf-extra">' + (lbl ? SIK.escape(lbl) + ': ' : '') + SIK.escape(v) + '</div>';
+    }).join('');
+  }
 
   /* Identitas organisasi dari pengaturan (fallback bila gagal) */
   (async function loadOrg(){
@@ -120,7 +169,15 @@
     return ini;
   }
 
-  function render(m){
+  async function render(m){
+    /* Pemetaan field kartu dari desain aktif (agar sinkron dengan PDF cetak) */
+    try {
+      var dsg = await DESIGN_PROMISE;
+      if(dsg && dsg.ok){
+        if(dsg.front && Array.isArray(dsg.front.fields)) CARD_TPL.frontFields = dsg.front.fields;
+        if(dsg.back && Array.isArray(dsg.back.fields)) CARD_TPL.backFields = dsg.back.fields;
+      }
+    } catch(e){}
     /* Masa berlaku = terdaftar + 3 tahun (sama dengan aturan cetak PDF) */
     var expDate = new Date(String(m.registered_at).slice(0,10) + 'T00:00:00');
     if(!isNaN(expDate)) expDate.setFullYear(expDate.getFullYear() + 3);
@@ -154,6 +211,7 @@
       + '          <div class="kf-npapg"><span class="lbl">NPAPG</span>' + SIK.escape(npapg || '••••••••••••••••') + '</div>'
       + '          <div class="kf-wil">' + SIK.escape(lineDesa) + '</div>'
       + '          <div class="kf-wil2">' + SIK.escape(lineWil) + '</div>'
+      + cardExtras('front')
       + '        </div>'
       + '        <div class="kf-code"><div class="rule"></div><div class="val" id="pcTitleFront">Kartu Tanda Anggota</div></div>'
       + '      </div>'
@@ -175,6 +233,7 @@
       + '              <div class="kb-chip"><span class="k">No. Kartu</span><span class="v">' + SIK.escape(m.kode_unik) + '</span></div>'
       + '            </div>'
       + '            <div class="kb-url">' + SIK.escape(m.url.replace(/^https?:\/\//, '')) + '</div>'
+      + cardExtras('back')
       + '          </div>'
       + '          <div class="kb-sealcol">'
       + '            <div class="kb-seal"><span class="s1">✓</span><span class="s2">Resmi</span></div>'
@@ -242,7 +301,7 @@
        pratinjau halaman ini mengikuti persis template yang dipakai PDF cetak. */
     (async () => {
       try {
-        var d = await (await fetch('/api/vcard/design')).json();
+        var d = await DESIGN_PROMISE;
         if(d && d.css){
           var st = document.createElement('style');
           st.id = 'ktaDesignOverride';
@@ -254,6 +313,8 @@
           if(tf && d.front && d.front.title_text) tf.textContent = d.front.title_text;
           var tb = document.getElementById('pcTitleBack');
           if(tb && d.back && d.back.header_text) tb.textContent = d.back.header_text;
+          if(d.front && Array.isArray(d.front.fields)){ CARD_TPL.frontFields = d.front.fields; }
+          if(d.back && Array.isArray(d.back.fields)){ CARD_TPL.backFields = d.back.fields; }
         }
       } catch(e){ /* fallback: tetap pakai desain bawaan */ }
     })();

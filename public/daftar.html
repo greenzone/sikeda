@@ -291,6 +291,61 @@
     this.value = this.value.replace(/\D/g,'').slice(0,14);
   });
 
+  /* ---------- Field dinamis (dikendalikan dari dashboard) ----------
+     Label/wajib/aktif field inti mengikuti pengaturan; field tambahan
+     (reg_extra_*) dirender di langkah 1. Gagal memuat → form bawaan. */
+  var EXTRA_FIELDS = [];
+  var FMAP = { nama:'fNama', nik:'fNik', tempat_lahir:'fTempat', tanggal_lahir:'fTgl', gender:'fGender', pekerjaan:'fKerja', kecamatan:'fKec', desa:'fDesa', alamat:'fAlamat', whatsapp:'fWa', email:'fEmail', telegram:'fTg' };
+  (async function(){
+    try {
+      var r = await fetch('/api/public/reg-fields').then(function(x){ return x.json(); });
+      if(!r || !r.ok || !Array.isArray(r.data)) return;
+      r.data.forEach(function(f){
+        var el = document.getElementById(FMAP[f.key]);
+        if(!el) return;
+        var wrap = el.closest('.field');
+        var lab = wrap ? wrap.querySelector('label') : null;
+        if(!f.active){
+          if(wrap) wrap.style.display = 'none';
+          el.removeAttribute('required');
+          return;
+        }
+        var locked = ['nama','nik','gender','kecamatan','desa','whatsapp'].indexOf(f.key) >= 0;
+        if(!locked){
+          if(f.required) el.setAttribute('required',''); else el.removeAttribute('required');
+        }
+        if(lab && f.label) lab.textContent = f.label + (f.required || locked ? ' *' : '');
+        if(f.placeholder && !el.placeholder) el.placeholder = f.placeholder;
+      });
+      EXTRA_FIELDS = r.data.filter(function(f){ return String(f.key).indexOf('reg_extra_') === 0; });
+      if(EXTRA_FIELDS.length){
+        var host = document.createElement('div');
+        host.className = 'stack gap-16 mt-24';
+        host.id = 'extraFields';
+        host.innerHTML = EXTRA_FIELDS.map(regFieldHtml).join('');
+        var panel1 = document.querySelector('.step-panel[data-panel="1"] .stack');
+        if(panel1) panel1.appendChild(host);
+      }
+    } catch(e){ /* diam — pakai form bawaan */ }
+  })();
+
+  function regFieldHtml(f){
+    var id = 'f_' + f.key;
+    var req = f.required ? ' required' : '';
+    var ph = f.placeholder ? ' placeholder="' + SIK.escape(f.placeholder) + '"' : '';
+    var star = f.required ? ' *' : '';
+    var lab = SIK.escape(f.label) + star;
+    if(f.type === 'select'){
+      return '<div class="field"><label for="' + id + '">' + lab + '</label><select id="' + id + '" class="select"' + req + '><option value="">Pilih…</option>'
+        + (f.options || []).map(function(o){ return '<option>' + SIK.escape(o) + '</option>'; }).join('') + '</select></div>';
+    }
+    if(f.type === 'textarea'){
+      return '<div class="field"><label for="' + id + '">' + lab + '</label><textarea id="' + id + '" class="textarea" rows="2"' + ph + req + '></textarea></div>';
+    }
+    var t = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : (f.type === 'date' ? 'date' : (f.type === 'number' ? 'number' : 'text')));
+    return '<div class="field"><label for="' + id + '">' + lab + '</label><div class="input-shell"><input id="' + id + '" type="' + t + '"' + ph + req + '></div></div>';
+  }
+
   /* ---------- Upload ---------- */
   function pickFile(input, boxId){
     var box = document.getElementById(boxId);
@@ -360,6 +415,10 @@
       ['WhatsApp', SIK.fmtPhone(val('fWa'))],
       ['Email', val('fEmail') || '—']
     ];
+    EXTRA_FIELDS.forEach(function(f){
+      var el = document.getElementById('f_' + f.key);
+      if(el) rows.push([f.label, el.value.trim() || '—']);
+    });
     var html = rows.map(function(r){
       return '<div style="display:flex;justify-content:space-between;gap:18px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:.88rem;">'
         + '<dt class="muted" style="margin:0;flex-shrink:0;">' + r[0] + '</dt>'
@@ -391,6 +450,10 @@
         telegram: val('fTg'),
         email: val('fEmail')
       };
+      EXTRA_FIELDS.forEach(function(f){
+        var el = document.getElementById('f_' + f.key);
+        if(el) payload[f.key] = el.value.trim();
+      });
       var res = await SIKAPI.post('/daftar', payload);
       openSheet(
         '<div class="center" style="padding:10px 6px 4px;">'

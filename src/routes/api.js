@@ -68,20 +68,28 @@ function rowToMember(r, opts){
     catatan: r.catatan || null,
     foto_path: r.foto_path || null,
     registered_at: r.registered_at,
-    approved_at: r.approved_at
+    approved_at: r.approved_at,
+    /* Field tambahan pendaftaran (reg_extra_*) — dipakai pemetaan konten kartu */
+    reg_extra: (() => { try { return r.reg_extra ? JSON.parse(r.reg_extra) : null; } catch(_){ return null; } })()
   };
 }
 
 /* ============================================================
    POST /api/daftar — pendaftaran publik (tanpa login)
+   Field wajib mengikuti konfigurasi dinamis (settings
+   'pendaftaran_fields'); field tambahan reg_extra_* dikemas ke
+   kolom JSON anggota.reg_extra.
    ============================================================ */
 router.post('/daftar', async (req, res) => {
   try {
     const b = req.body || {};
-    const required = ['nama','nik','tempat_lahir','tanggal_lahir','gender','pekerjaan','kecamatan','desa','alamat','whatsapp'];
-    for(const f of required){
-      if(!String(b[f] || '').trim()){
-        return res.status(400).json({ error: 'Kolom ' + f + ' wajib diisi.' });
+    const regfields = require('../regfields');
+    await regfields.ensureRegExtra();
+    const fields = await regfields.loadActiveFields();
+    /* Validasi wajib dinamis (field inti + tambahan yang ditandai required) */
+    for(const f of fields){
+      if(f.required && !String(b[f.key] || '').trim()){
+        return res.status(400).json({ error: 'Kolom ' + f.label + ' wajib diisi.' });
       }
     }
     const nik = String(b.nik).replace(/\D/g,'');
@@ -111,13 +119,30 @@ router.post('/daftar', async (req, res) => {
 
     let tg = String(b.telegram || '').trim() || null;
     if(tg && !(/^@[A-Za-z0-9_]{4,}$/.test(tg) || /^\d{5,}$/.test(tg))) tg = null;
+
+    /* Field tambahan (reg_extra_*) → JSON ke kolom anggota.reg_extra.
+       Hanya field yang dikenal & aktif; select divalidasi terhadap opsinya. */
+    let regExtra = null;
+    try {
+      const extras = {};
+      for(const f of fields){
+        if(!f.key.startsWith('reg_extra_')) continue;
+        const v = String(b[f.key] == null ? '' : b[f.key]).trim().slice(0, 500);
+        if(f.type === 'select' && f.options && f.options.length && v && !f.options.includes(v)){
+          return res.status(400).json({ error: 'Nilai kolom ' + f.label + ' tidak valid.' });
+        }
+        if(v) extras[f.key] = v;
+      }
+      if(Object.keys(extras).length) regExtra = JSON.stringify(extras);
+    } catch(_){ /* jangan gagalkan pendaftaran karena kemasan extra */ }
+
     await q(
       `INSERT INTO anggota (kode_unik, nama, nik_enc, nik_hash, gender, tempat_lahir, tanggal_lahir,
-        pekerjaan, kecamatan, desa, alamat, whatsapp, telegram, email, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Pending')`,
+        pekerjaan, kecamatan, desa, alamat, whatsapp, telegram, email, status, reg_extra)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Pending',?)`,
       [kode, String(b.nama).trim(), encryptNIK(nik), nikHash, b.gender,
        String(b.tempat_lahir).trim(), b.tanggal_lahir, String(b.pekerjaan).trim(),
-       b.kecamatan, b.desa, String(b.alamat).trim(), wa, tg, String(b.email || '').trim() || null]
+       b.kecamatan, b.desa, String(b.alamat).trim(), wa, tg, String(b.email || '').trim() || null, regExtra]
     );
 
     await logAct(null, 'Pendaftaran baru', kode + ' — ' + String(b.nama).trim());
@@ -144,7 +169,7 @@ router.post('/daftar', async (req, res) => {
   }
 });
 
-/* ============================================================
+/* ============
    GET /api/wilayah — daftar kecamatan & desa (publik)
    ============================================================ */
 router.get('/wilayah', async (req, res) => {
@@ -188,7 +213,9 @@ router.get('/vcard/:kode', authRequired, async (req, res) => {
       alamat: r.alamat,
       email: r.status === 'Aktif' ? r.email : null,
       telegram: r.status === 'Aktif' ? (r.telegram || null) : null,
-      whatsapp: r.status === 'Aktif' ? r.whatsapp : null
+      whatsapp: r.status === 'Aktif' ? r.whatsapp : null,
+      /* Field tambahan pendaftaran (reg_extra_*) untuk pemetaan konten kartu */
+      reg_extra: (() => { try { return r.reg_extra ? JSON.parse(r.reg_extra) : null; } catch(_){ return null; } })()
     }
   });
 });
@@ -196,6 +223,64 @@ router.get('/vcard/:kode', authRequired, async (req, res) => {
 /* ============ Area di bawah ini butuh login pengelola ============ */
 router.use(authRequired);
 
+/* ============================================================
+   FIELD FORM PENDAFTARAN (dinamis) — pengaturan superadmin.
+   Definisi tersimpan di settings 'pendaftaran_fields' (lihat
+   src/regfields.js). Form publik mengikuti konfigurasi ini.
+   ============================================================ */
+router.get('/reg-fields', requireRole('admin', 'superadmin'), async (req, res) => {
+  try {
+    const regfields = require('../regfields');
+    const rows = await q("SELECT nilai FROM settings WHERE kunci = 'pendaftaran_fields' LIMIT 1");
+    let stored = null;
+    if(rows[0] && rows[0].nilai){ try { stored = JSON.parse(rows[0].nilai); } catch(_){ stored = null; } }
+    res.json({
+      ok: true,
+      data: regfields.normalize(stored),
+      custom: !!stored,
+      maxExtra: regfields.MAX_EXTRA,
+      canEdit: req.user.level === 'superadmin'
+    });
+  } catch(e){
+    console.error(e);
+    res.status(500).json({ error: 'Gagal memuat konfigurasi field pendaftaran.' });
+  }
+});
+
+router.put('/reg-fields', requireRole('superadmin'), async (req, res) => {
+  const regfields = require('../regfields');
+  let list;
+  try {
+    list = regfields.validate(req.body && Array.isArray(req.body.fields) ? req.body.fields : req.body);
+  } catch(ve){
+    return res.status(400).json({ error: ve.message || 'Konfigurasi field tidak valid.' });
+  }
+  try {
+    await regfields.ensureRegExtra();
+    await q("INSERT INTO settings (kunci, nilai) VALUES ('pendaftaran_fields', ?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)",
+      [JSON.stringify(list)]);
+    await logAct(req.user, 'Ubah field form pendaftaran', list.length + ' field tersimpan');
+    res.json({ ok: true, message: 'Konfigurasi field pendaftaran tersimpan.', data: list });
+  } catch(e){
+    console.error(e);
+    res.status(500).json({ error: 'Gagal menyimpan konfigurasi field.' });
+  }
+});
+
+/* Reset ke konfigurasi bawaan (hapus tersimpanan) */
+router.delete('/reg-fields', requireRole('superadmin'), async (req, res) => {
+  try {
+    await q("DELETE FROM settings WHERE kunci = 'pendaftaran_fields'");
+    await logAct(req.user, 'Reset field form pendaftaran', 'kembali ke bawaan');
+    res.json({ ok: true, message: 'Field pendaftaran kembali ke bawaan.' });
+  } catch(e){
+    console.error(e);
+    res.status(500).json({ error: 'Gagal mereset konfigurasi field.' });
+  }
+});
+
+/* ============================================================
+   GET /api/wilayah
 /* ============================================================
    GET /api/stats — statistik dashboard (admin & superadmin)
    ============================================================ */
@@ -666,11 +751,11 @@ router.post('/members/:id/photo', requireRole('superadmin'), async (req, res) =>
     const { normalizePhoto } = require('../photo');
     const fs = require('fs');
     const path = require('path');
-    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
+    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
 
     const delOld = () => {
       if(a.foto_path){
-        const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', a.foto_path.replace(/^\/+/, ''));
+        const oldPath = path.join(__dirname, '..', '..', 'public', a.foto_path.replace(/^\/+/, ''));
         if(oldPath.startsWith(dir) && fs.existsSync(oldPath)){ try { fs.unlinkSync(oldPath); } catch(e){} }
       }
     };
@@ -895,13 +980,13 @@ router.post('/settings/logo', requireRole('superadmin'), async (req, res) => {
 
     const fs = require('fs');
     const path = require('path');
-    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
+    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
     fs.mkdirSync(dir, { recursive: true });
 
     /* Hapus berkas lama agar uploads tidak menumpuk */
     const prev = await q('SELECT nilai FROM settings WHERE kunci = ?', [key]);
     if(prev[0] && prev[0].nilai){
-      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', prev[0].nilai.replace(/^\/+/, ''));
+      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
 
@@ -1269,13 +1354,13 @@ router.post('/content/image', requireRole('superadmin'), async (req, res) => {
 
     const fs = require('fs');
     const path = require('path');
-    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
+    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
     fs.mkdirSync(dir, { recursive: true });
 
     /* Hapus berkas lama agar uploads tidak menumpuk */
     const prev = await q('SELECT nilai FROM settings WHERE kunci = ?', [field.key]);
     if(prev[0] && prev[0].nilai){
-      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', prev[0].nilai.replace(/^\/+/, ''));
+      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
 
@@ -1306,8 +1391,8 @@ router.delete('/content/image/:key', requireRole('superadmin'), async (req, res)
     if(prev[0] && prev[0].nilai){
       const fs = require('fs');
       const path = require('path');
-      const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
-      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', prev[0].nilai.replace(/^\/+/, ''));
+      const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
+      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       await q('DELETE FROM settings WHERE kunci = ?', [field.key]);
     }
@@ -1447,11 +1532,11 @@ router.post('/me/photo', authRequired, requireRole('anggota'), async (req, res) 
     const { normalizePhoto } = require('../photo');
     const fs = require('fs');
     const path = require('path');
-    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
+    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
 
     const delOld = () => {
       if(a.foto_path){
-        const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', a.foto_path.replace(/^\/+/, ''));
+        const oldPath = path.join(__dirname, '..', '..', 'public', a.foto_path.replace(/^\/+/, ''));
         if(oldPath.startsWith(dir) && fs.existsSync(oldPath)){ try { fs.unlinkSync(oldPath); } catch(e){} }
       }
     };
@@ -1795,6 +1880,11 @@ const KTA_DEFAULT = {
 function ktaNormalizeSide(raw, def){
   const s = Object.assign({}, def, raw && typeof raw === 'object' ? raw : {});
   const clamp = (v, a, b) => (Number.isFinite(+v) ? Math.min(b, Math.max(a, +v)) : null);
+  /* Pemetaan konten kartu → data field (bawaan & field form pendaftaran) */
+  try {
+    const cardfields = require('../cardfields');
+    s.fields = cardfields.validateRows(s.fields);
+  } catch(_){ s.fields = []; }
   for(const k of ['qr','photo','data','title']){
     if(!s[k] || typeof s[k] !== 'object'){ s[k] = Object.assign({}, def[k] || {}); continue; }
     s[k] = Object.assign({}, def[k] || {}, s[k]);
@@ -1817,6 +1907,16 @@ function ktaNormalize(raw){
     };
   } catch(_) { return JSON.parse(JSON.stringify(KTA_DEFAULT)); }
 }
+
+/* Daftar field yang dapat dipetakan ke konten kartu (editor Desain Kartu) */
+router.get('/kta-fields', requireRole('admin','superadmin'), async (req, res) => {
+  try {
+    res.json({ ok: true, data: await require('../cardfields').availableFields() });
+  } catch(e){
+    console.error(e);
+    res.status(500).json({ error: 'Gagal memuat daftar field kartu.' });
+  }
+});
 
 router.get('/kta-template', requireRole('admin','superadmin'), async (req, res) => {    const rows = await q("SELECT nilai FROM settings WHERE kunci = 'kta_template' LIMIT 1");
     const saved = rows[0] ? ktaNormalize(rows[0].nilai) : null;
@@ -1855,8 +1955,8 @@ router.delete('/kta-template', requireRole('superadmin'), async (req, res) => {
         ['front','back'].forEach(side => {
           const old = t[side] && t[side].bg_image;
           if(old && !used.has(String(old))){
-            const p = path.join(require('../uploads-path').uploadsRoot(), '..', String(old).replace(/^\/+/, ''));
-            if(p.startsWith(require('../uploads-path').uploadsRoot()) && fs.existsSync(p)) fs.unlinkSync(p);
+            const p = path.join(__dirname, '..', '..', 'public', String(old).replace(/^\/+/, ''));
+            if(p.startsWith(path.join(__dirname, '..', '..', 'public', 'uploads')) && fs.existsSync(p)) fs.unlinkSync(p);
           }
         });
       } catch(_) {}
@@ -1881,8 +1981,8 @@ router.delete('/kta-template/bg/:side', requireRole('superadmin'), async (req, r
       if(old){
         const used = await ktaBgUsedByPresets();
         const fs = require('fs');
-        const p = path.join(require('../uploads-path').uploadsRoot(), '..', String(old).replace(/^\/+/, ''));
-        if(!used.has(String(old)) && p.startsWith(require('../uploads-path').uploadsRoot()) && fs.existsSync(p)) fs.unlinkSync(p);
+        const p = path.join(__dirname, '..', '..', 'public', String(old).replace(/^\/+/, ''));
+        if(!used.has(String(old)) && p.startsWith(path.join(__dirname, '..', '..', 'public', 'uploads')) && fs.existsSync(p)) fs.unlinkSync(p);
       }
       t[side].bg_image = '';
       await q("UPDATE settings SET nilai = ? WHERE kunci = 'kta_template'", [JSON.stringify(t)]);
@@ -1903,13 +2003,13 @@ router.post('/kta-template/bg/:side', requireRole('superadmin'), async (req, res
     if(buf.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'Ukuran maksimal 5 MB.' });
     if(buf.length < 64) return res.status(400).json({ error: 'Berkas gambar tidak valid.' });
     const fs = require('fs');
-    const dir = require('../uploads-path').uploadsRoot(); /* Vercel: /tmp (UPLOADS_DIR) */
+    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
     fs.mkdirSync(dir, { recursive: true });
     const rows = await q("SELECT nilai FROM settings WHERE kunci = 'kta_template' LIMIT 1");
     const t = rows[0] ? ktaNormalize(rows[0].nilai) : ktaNormalize(null);
     const prev = t[side] && t[side].bg_image;
     if(prev){
-      const oldPath = path.join(require('../uploads-path').uploadsRoot(), '..', String(prev).replace(/^\/+/, ''));
+      const oldPath = path.join(__dirname, '..', '..', 'public', String(prev).replace(/^\/+/, ''));
       if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
     const fname = 'kta-bg-' + side + '-' + Date.now() + '.' + ext;
@@ -2058,8 +2158,8 @@ router.put('/kta-presets/:id/activate', requireRole('superadmin'), async (req, r
         if(old && old !== now && !used.has(String(old))){
           try {
             const fs = require('fs');
-            const fp = path.join(require('../uploads-path').uploadsRoot(), '..', String(old).replace(/^\/+/, ''));
-            if(fp.startsWith(require('../uploads-path').uploadsRoot()) && fs.existsSync(fp)) fs.unlinkSync(fp);
+            const fp = path.join(__dirname, '..', '..', 'public', String(old).replace(/^\/+/, ''));
+            if(fp.startsWith(path.join(__dirname, '..', '..', 'public', 'uploads')) && fs.existsSync(fp)) fs.unlinkSync(fp);
           } catch(_) {}
         }
       });
@@ -2137,6 +2237,7 @@ router.get('/storage', requireRole('admin','superadmin'), async (req, res) => {
       driver: await storage.driver(),
       cdnBase: await storage.cdnBase(),
       credStatus: await storage.credStatus(),
+      docLinks: storage.DOC_LINKS,
       canEdit: req.user.level === 'superadmin'
     } });
   } catch(e){ res.status(500).json({ error: 'Gagal membaca konfigurasi penyimpanan.' }); }
@@ -2196,7 +2297,8 @@ router.post('/storage/test', requireRole('superadmin'), async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message || 'Uji penyimpanan gagal.' }); }
 });
 
-/* GET /api/storage/files → daftar file lokal (superadmin; seksi migrasi file lama) */
+/* GET /api/storage/files → daftar file lokal + status mirror driver aktif
+   (superadmin; dipakai seksi migrasi file lama). Maks 500 entri. */
 router.get('/storage/files', requireRole('superadmin'), async (req, res) => {
   try {
     const d = await storage.driver();
@@ -2205,6 +2307,7 @@ router.get('/storage/files', requireRole('superadmin'), async (req, res) => {
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     let files = storage.listLocalFiles().filter(f => f.rel !== 'uploads/.gitkeep' && f.size > 0);
     const total = files.length;
+    /* Status mirror: bandingkan dengan daftar kunci remote (aktif; ?withRemote=0 untuk lewati) */
     let remotes = null;
     if(String(req.query.withRemote) !== '0') remotes = await storage.listRemoteKeys();
     files = files.slice(offset, offset + limit).map(f => ({ rel: f.rel, size: f.size, mirrored: remotes ? remotes.has(f.rel) : null }));
@@ -2234,7 +2337,7 @@ router.post('/storage/mirror', requireRole('superadmin'), async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message || 'Mirror gagal.' }); }
 });
 
-/* GET /api/storage/automig → status migrasi otomatis */
+/* GET /api/storage/automig → status migrasi otomatis (ringkasan, tanpa daftar done penuh) */
 router.get('/storage/automig', requireRole('superadmin'), async (req, res) => {
   try {
     const s = await storage.automigLoad();
@@ -2248,7 +2351,7 @@ router.get('/storage/automig', requireRole('superadmin'), async (req, res) => {
   } catch(e){ res.status(500).json({ error: 'Gagal membaca status migrasi otomatis.' }); }
 });
 
-/* PUT /api/storage/automig {enabled, batch, intervalSecs} → atur (di Vercel: berlaku per cold start) */
+/* PUT /api/storage/automig {enabled, batch, intervalSecs} → atur & (di server Node) jalankan timer */
 router.put('/storage/automig', requireRole('superadmin'), async (req, res) => {
   try {
     const b = req.body || {};
@@ -2257,12 +2360,13 @@ router.put('/storage/automig', requireRole('superadmin'), async (req, res) => {
     if(b.batch !== undefined) cur.batch = Math.min(Math.max(parseInt(b.batch, 10) || 10, 1), 100);
     if(b.intervalSecs !== undefined) cur.intervalSecs = Math.min(Math.max(parseInt(b.intervalSecs, 10) || 30, 10), 3600);
     await storage.automigSave(cur);
+    if(cur.enabled) storage.automigStart(true); else storage.automigStop();
     await logAct(req.user, 'Pengaturan migrasi otomatis', 'enabled=' + cur.enabled + ', batch=' + cur.batch + ', interval=' + cur.intervalSecs + 's');
     res.json({ ok: true, data: { enabled: cur.enabled, batch: cur.batch, intervalSecs: cur.intervalSecs } });
   } catch(e){ res.status(500).json({ error: 'Gagal menyimpan pengaturan migrasi otomatis.' }); }
 });
 
-/* POST /api/storage/automig-run → jalankan satu langkah sekarang */
+/* POST /api/storage/automig-run → jalankan satu langkah sekarang (satu batch) */
 router.post('/storage/automig-run', requireRole('superadmin'), async (req, res) => {
   try {
     const r = await storage.automigStep();
@@ -2274,7 +2378,8 @@ router.post('/storage/automig-run', requireRole('superadmin'), async (req, res) 
 /* ============================================================
    Beban sistem & antrian (busy queue)
    GET /api/busy  → status: mode, beban saat ini, ambang
-   PUT /api/busy  → superadmin: mode, manual on/off, ambang, hold & release
+   PUT /api/busy  → superadmin: mode (auto/manual/off), manual on/off,
+                    ambang concurrency/lag, hold & release
    ============================================================ */
 const busyMod = require('../busy');
 

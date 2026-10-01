@@ -28,6 +28,37 @@ const { baseUrl } = require('../baseurl');
 
 const router = express.Router();
 const { authRequired, requireRole } = require('../middleware');
+const cardfields = require('../cardfields');
+
+/* ------------------------------------------------------------------
+   GET /api/vcard/fields — daftar field yang bisa dipetakan ke konten
+   kartu (bawaan + field form pendaftaran aktif). Untuk editor Desain
+   Kartu di dashboard.
+   ------------------------------------------------------------------ */
+router.get('/fields', requireRole('admin', 'superadmin'), async (req, res) => {
+  try {
+    res.json({ ok: true, data: await cardfields.availableFields() });
+  } catch(e){
+    console.error('/api/vcard/fields error:', e && e.message);
+    res.status(500).json({ error: 'Gagal memuat daftar field kartu.' });
+  }
+});
+
+/* ------------------------------------------------------------------
+   fieldsRowsHtml(rows, map, esc, side) — baris pemetaan field kartu
+   menjadi HTML. Nilai kosong dilewati.
+   ------------------------------------------------------------------ */
+function fieldsRowsHtml(rows, map, esc, side){
+  if(!Array.isArray(rows) || !rows.length) return '';
+  return rows.map(r => {
+    const val = String((map && map[r.field]) != null ? map[r.field] : '').trim();
+    if(!val) return '';
+    const lbl = String(r.label || '').trim();
+    return side === 'back'
+      ? '<div class="kb-extra">' + (lbl ? '<b>' + esc(lbl) + '</b>' : '') + esc(val) + '</div>'
+      : '<div class="kf-extra">' + (lbl ? esc(lbl) + ': ' : '') + esc(val) + '</div>';
+  }).join('');
+}
 
 /* Dimensi fisik kartu (ISO/IEC 7810 ID-1) dalam mm */
 const ID1_W = 85.6;
@@ -59,8 +90,8 @@ router.get('/design', async (req, res) => {
       ok: true,
       custom: !!tpl,
       css: tpl ? tplOverrideCss(tpl, null) : '',
-      front: { title_text: (tpl && tpl.front && tpl.front.title_text) || 'Kartu Tanda Anggota' },
-      back:  { header_text: (tpl && tpl.back && tpl.back.header_text) || 'Kartu Tanda Anggota' }
+      front: { title_text: (tpl && tpl.front && tpl.front.title_text) || 'Kartu Tanda Anggota', fields: (tpl && tpl.front && tpl.front.fields) || [] },
+      back:  { header_text: (tpl && tpl.back && tpl.back.header_text) || 'Kartu Tanda Anggota', fields: (tpl && tpl.back && tpl.back.fields) || [] }
     });
   } catch(e){
     console.error('/api/vcard/design error:', e && e.message);
@@ -403,6 +434,14 @@ async function buildPdfBuffer(kode, req) {
         public/assets/css/kta-card.css → screenshot 1600×1009 px.
      ------------------------------------------------------------ */
   const memberUrl = pdfHost + '/kta/' + kode.toLowerCase();
+  const valueMap = cardfields.buildValueMap(a, {
+    npapg: nikPlain || (a.nik_hash ? '••••••••••••••••' : ''),
+    nik: nikPlain || (a.nik_hash ? '••••••••••••••••' : ''),
+    org_nama,
+    org_wilayah,
+    memberUrl,
+    expLabel: expLabelFrom(a.registered_at)
+  });
   const cardHtml = buildCardHtml({
     host: pdfHost,
     orgNama: org_nama,
@@ -420,6 +459,9 @@ async function buildPdfBuffer(kode, req) {
     tplCss,
     titleFront: (tpl && tpl.front && tpl.front.title_text) || '',
     titleBack: (tpl && tpl.back && tpl.back.header_text) || '',
+    frontFields: (tpl && tpl.front && tpl.front.fields) || null,
+    backFields: (tpl && tpl.back && tpl.back.fields) || null,
+    fieldMap: valueMap,
   });
 
   const browser = await puppeteer.launch({
@@ -566,6 +608,14 @@ async function buildPngBuffer(kode, req) {
   } catch (_) { tpl = null; }
   const tplCss = tpl ? tplOverrideCss(tpl, pngHost) : '';
   const memberUrl = pngHost + '/kta/' + kode.toLowerCase();
+  const valueMap = cardfields.buildValueMap(a, {
+    npapg: nikPlain || (a.nik_hash ? '••••••••••••••••' : ''),
+    nik: nikPlain || (a.nik_hash ? '••••••••••••••••' : ''),
+    org_nama,
+    org_wilayah,
+    memberUrl,
+    expLabel: expLabelFrom(a.registered_at)
+  });
   const cardHtml = buildCardHtml({
     host: pngHost,
     orgNama: org_nama,
@@ -583,6 +633,9 @@ async function buildPngBuffer(kode, req) {
     tplCss,
     titleFront: (tpl && tpl.front && tpl.front.title_text) || '',
     titleBack: (tpl && tpl.back && tpl.back.header_text) || '',
+    frontFields: (tpl && tpl.front && tpl.front.fields) || null,
+    backFields: (tpl && tpl.back && tpl.back.fields) || null,
+    fieldMap: valueMap,
   });
 
   const browser = await puppeteer.launch({
@@ -728,6 +781,9 @@ function buildCardHtml(o) {
     : '<span class="kf-ini">' + initialsOf(o.nama) + '</span>';
 
   const npapgMasked = o.npapg || '';
+  /* Baris pemetaan field (konten kartu customizable) */
+  const frontRows = fieldsRowsHtml(o.frontFields, o.fieldMap, esc, 'front');
+  const backRows = fieldsRowsHtml(o.backFields, o.fieldMap, esc, 'back');
   /* Baris wilayah sesuai kartu fisik referensi:
      baris 1 = Desa - Kecamatan, baris 2 = wilayah organisasi */
   const lineDesa = (o.desa && o.kecamatan)
@@ -766,6 +822,7 @@ ${o.tplCss || ''}
       <div class="kf-npapg"><span class="lbl">NPAPG</span>${esc(npapgMasked || '••••••••••••••••')}</div>
       <div class="kf-wil">${esc(lineDesa)}</div>
       <div class="kf-wil2">${esc(lineWil)}</div>
+      ${frontRows}
     </div>
     <div class="kf-code"><div class="rule"></div><div class="val">${esc(o.titleFront || 'Kartu Tanda Anggota')}</div></div>
   </div>
@@ -787,6 +844,7 @@ ${o.tplCss || ''}
           <div class="kb-chip"><span class="k">No. Kartu</span><span class="v">${esc(o.kode)}</span></div>
         </div>
         <div class="kb-url">${esc(o.memberUrl.replace(/^https?:\/\//, ''))}</div>
+        ${backRows}
       </div>
       <div class="kb-sealcol">
         <div class="kb-seal"><span class="s1">✓</span><span class="s2">Resmi</span></div>
@@ -883,3 +941,6 @@ module.exports = router;
 module.exports._buildCardHtml = buildCardHtml;   /* untuk debug/test */
 module.exports._buildPngBuffer = buildPngBuffer; /* untuk debug/test */
 module.exports._tplOverrideCss = tplOverrideCss; /* dipakai route /design publik */
+module.exports._renderPdfDoc = renderPdfDoc;     /* dipakai src/pdf-vercel.js */
+module.exports._expLabelFrom = expLabelFrom;     /* dipakai src/pdf-vercel.js */
+module.exports._fieldsRowsHtml = fieldsRowsHtml; /* pemetaan field kartu */

@@ -60,7 +60,8 @@
       { group:'Website', items:[
         { id:'webHome',  label:'Beranda',   icon:'globe' },
         { id:'webLogin', label:'Halaman Login', icon:'shield' },
-        { id:'webPages', label:'Halaman Lainnya', icon:'file' }
+        { id:'webPages', label:'Halaman Lainnya', icon:'file' },
+        { id:'formFields', label:'Form Pendaftaran', icon:'file' }
       ]},
       { group:'Keanggotaan', items:[
         { id:'calon',   label:'Calon Anggota',  icon:'inbox', countKey:'pending' },
@@ -84,7 +85,8 @@
       { group:'Website', items:[
         { id:'webHome',  label:'Beranda',   icon:'globe' },
         { id:'webLogin', label:'Halaman Login', icon:'shield' },
-        { id:'webPages', label:'Halaman Lainnya', icon:'file' }
+        { id:'webPages', label:'Halaman Lainnya', icon:'file' },
+        { id:'formFields', label:'Form Pendaftaran', icon:'file' }
       ]},
       { group:'Keanggotaan', items:[
         { id:'calon',   label:'Calon Anggota',  icon:'inbox', countKey:'pending' },
@@ -133,17 +135,18 @@
   /* Cache hitungan untuk lonceng admin (draft + calon) */
   var adminCache = { draft: 0, calon: 0 };
 
-  /* Avatar sesi: foto bila ada, fallback ikon user (bukan inisial) */
+  /* Avatar sesi: foto bila ada; kosong/gagal → fallback default /favicon */
+  var AVA_FALLBACK = '/favicon/web-app-manifest-192x192.png';
+  function avatarImg(src, alt){
+    alt = alt || 'Foto profil';
+    return '<img src="' + SIK.escape(src) + '" alt="' + SIK.escape(alt) + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;position:relative;" '
+      + 'onerror="this.onerror=null;this.src=\'' + AVA_FALLBACK + '?v=' + Date.now() + '\';">';
+  }
   function sessionAvatarHtml(){
     var fp = SESSION_USER.foto_path;
-    if(fp){
-      return '<div class="avatar" style="padding:0;overflow:hidden;position:relative;">'
-        + '<span style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;">' + IC.user + '</span>'
-        + '<img src="' + SIK.escape(fp) + '?v=' + Date.now() + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;position:relative;" '
-        + 'onerror="this.style.display=\'none\';this.previousElementSibling.style.display=\'flex\';">'
-        + '</div>';
-    }
-    return '<div class="avatar">' + IC.user + '</div>';
+    return '<div class="avatar" style="padding:0;overflow:hidden;position:relative;">'
+      + (fp ? avatarImg(SIK.escape(fp) + '?v=' + Date.now()) : avatarImg(AVA_FALLBACK))
+      + '</div>';
   }
 
   function renderSidebar(){
@@ -164,10 +167,8 @@
         + '<div style="min-width:0;"><div style="font-weight:700;font-size:.86rem;color:#fff;">' + SIK.escape(SESSION_USER.nama) + '</div>'
         + '<div class="tiny" style="color:rgba(238,242,248,.5);">' + ROLES[ROLE].label + '</div></div>';
     }
-    var userIcBig = IC.user.replace('width="18" height="18"', 'width="58%" height="58%"');
-    document.getElementById('topAvatar').innerHTML = SESSION_USER.foto_path
-      ? '<img src="' + SIK.escape(SESSION_USER.foto_path) + '?v=' + Date.now() + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" onerror="this.remove()">'
-      : userIcBig;
+    document.getElementById('topAvatar').innerHTML = avatarImg(
+      SESSION_USER.foto_path ? SIK.escape(SESSION_USER.foto_path) + '?v=' + Date.now() : AVA_FALLBACK);
     var badge = document.getElementById('roleBadge');
     badge.textContent = ROLES[ROLE].label;
     badge.className = 'badge ' + ROLES[ROLE].cls;
@@ -199,6 +200,7 @@
     webLogin:  'Kelola konten halaman masuk',
     webPages:  'Verifikasi kartu, privasi, kontak & halaman lain',
     kartuDesain: 'Template desain kartu fisik: latar, posisi & teks',
+    formFields: 'Atur field formulir pendaftaran: label, wajib & urutan',
     calon:     'Pengajuan menunggu tindakan Anda',
     anggota:   'Kelola dan telusuri anggota resmi',
     pengumuman:'Pengumuman & pesan untuk anggota (umum / personal)',

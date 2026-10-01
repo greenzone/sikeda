@@ -253,20 +253,28 @@
      dipakai di tabel daftar anggota, calon, dan antrean kartu. */
   var IC_USER_SVG = '<svg width="55%" height="55%" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="7" r="3.6" stroke="currentColor" stroke-width="1.7"/></svg>';
 
-  /* Fallback global: gambar foto gagal dimuat → ganti avatar dengan ikon user */
+  /* Fallback global: gambar foto gagal dimuat → fallback default /favicon */
+  var SIKAVA_FALLBACK = '/favicon/web-app-manifest-192x192.png';
   window.SIKavatarFallback = function(img){
-    var av = img.closest('.avatar');
-    if(!av) return;
-    av.classList.add('icon-badge');
-    av.innerHTML = IC_USER_SVG;
+    if(!img) return;
+    img.onerror = null;
+    var src = String(img.getAttribute('src') || '');
+    if(src.indexOf(SIKAVA_FALLBACK) === 0) return;
+    img.src = SIKAVA_FALLBACK + '?v=' + Date.now();
   };
+  /* Avatar tanpa foto → gambar fallback default (folder /favicon) */
+  function fallbackAvatar(size){
+    var s = size || 30;
+    var st = 'width:' + s + 'px;height:' + s + 'px;border-radius:' + Math.round(s * 0.3) + 'px;padding:0;overflow:hidden;';
+    return '<span class="avatar" style="' + st + '"><img src="' + SIKAVA_FALLBACK + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></span>';
+  }
 
   function photoAvatar(a, size){
     var s = size || 30;
     var st = 'width:' + s + 'px;height:' + s + 'px;border-radius:' + Math.round(s * 0.3) + 'px;';
     if(!a.foto_path){
-      /* Tanpa foto → ikon user, bukan inisial */
-      return '<span class="icon-badge" style="' + st + '">' + IC_USER_SVG + '</span>';
+      /* Tanpa foto → gambar fallback default */
+      return fallbackAvatar(s);
     }
     return '<span class="avatar" style="' + st + 'padding:0;overflow:hidden;font-size:' + (s * 0.4).toFixed(1) + 'px;position:relative;flex-shrink:0;">'
       + SIK.initials(a.nama)
@@ -424,7 +432,7 @@
       var p = (await SIKAPI.get('/me/profile')).data;
       var avatarHtml = p.foto_path
         ? '<span class="avatar xl gold" style="padding:0;overflow:hidden;"><img id="profAvatarImg" src="' + esc(p.foto_path) + '?v=' + Date.now() + '" alt="Foto ' + esc(p.nama) + '" style="width:100%;height:100%;object-fit:cover;" onerror="SIKavatarFallback(this)"></span>'
-        : '<span class="icon-badge avatar xl gold" id="profAvatarImg">' + (IC.user || '') + '</span>';
+        : '<span class="avatar xl gold" style="padding:0;overflow:hidden;"><img id="profAvatarImg" src="/favicon/web-app-manifest-192x192.png" alt="Foto ' + esc(p.nama) + '" style="width:100%;height:100%;object-fit:cover;"></span>';
       host.innerHTML =
         '<div class="prof-2col">'
         + '<div>'
@@ -1042,7 +1050,7 @@
         var isPending = a.status === 'Pending';
         openSheet(
           '<div class="row gap-16">'
-          + '<div class="icon-badge avatar lg gold">' + (IC.user || '') + '</div>'
+          + '<div class="avatar lg gold" style="padding:0;overflow:hidden;"><img src="/favicon/web-app-manifest-192x192.png" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>'
           + '<div><div class="display-m">' + esc(a.nama) + '</div>'
           + '<div class="small muted mono">' + esc(a.kode_unik) + '</div>'
           + '<div class="mt-8">' + badgeStatus(a.status) + '</div></div></div>'
@@ -1248,7 +1256,7 @@
           var stCls = a.status === 'Aktif' ? 'badge-success' : (a.status === 'Pending' ? 'badge-warn' : 'badge-danger');
           var avatarHtml = a.foto_path
             ? '<span class="avatar lg gold" style="padding:0;overflow:hidden;"><img src="' + esc(a.foto_path) + '?v=' + Date.now() + '" alt="Foto ' + esc(a.nama) + '" style="width:100%;height:100%;object-fit:cover;" onerror="SIKavatarFallback(this)"></span>'
-            : '<span class="icon-badge avatar lg gold">' + (IC.user || '') + '</span>';
+            : '<span class="avatar lg gold" style="padding:0;overflow:hidden;"><img src="/favicon/web-app-manifest-192x192.png" alt="Foto ' + esc(a.nama) + '" style="width:100%;height:100%;object-fit:cover;"></span>';
           openSheet(
             '<div class="detail-head">'
             + '<div class="detail-title"><div style="min-width:0;">'
@@ -1662,6 +1670,9 @@
       var res = await SIKAPI.get('/kta-template');
       var t = res.data, canEdit = !!res.canEdit, isCustom = !!res.custom;
       var presets = res.presets || { list: [], active: null };
+      /* Pilihan field untuk pemetaan konten kartu (bawaan + field form pendaftaran) */
+      var fieldOpts = [];
+      try { fieldOpts = (await SIKAPI.get('/kta-fields')).data || []; } catch(e){ fieldOpts = []; }
       /* Migrasi semantik: dulu x dipakai sebagai tepi KANAN saat rata kanan
          (14 & 82) — sekarang x = tepi kiri elemen, jadi tepi kanan = 96.4
          (sejajar QR/foto, persis vcard.html). */
@@ -1677,7 +1688,7 @@
       host.innerHTML =
         '<div class="sticky-save between wrap-flex gap-12">'
         + '<div><h3 class="display-s">Desain Kartu Fisik</h3>'
-        + '<p class="small muted mt-8">Atur latar, posisi QR/foto/data, dan teks. Pratinjau langsung — hasil sama dengan PDF cetak. ' + (isCustom ? '<span class="badge badge-info">Template kustom aktif</span>' : '<span class="badge badge-neutral">Masih bawaan tema</span>') + '</p></div>'
+        + '<p class="small muted mt-8">Atur latar, posisi QR/foto/data, teks, dan isi kartu dari data field pendaftaran. Pratinjau langsung — hasil sama dengan PDF cetak. ' + (isCustom ? '<span class="badge badge-info">Template kustom aktif</span>' : '<span class="badge badge-neutral">Masih bawaan tema</span>') + '</p></div>'
         + '<div class="row gap-8 wrap-flex">'
         + (canEdit ? '<button class="btn btn-primary" id="kdSave">Simpan desain</button><button class="btn btn-ghost" id="kdReset">Kembalikan bawaan</button>' : '<span class="badge badge-warn">Hanya superadmin dapat mengubah</span>')
         + '</div></div>'
@@ -1705,6 +1716,14 @@
         +     '</div>'
         +     '<div class="kd-gal" id="kdGal"></div>'
         +   '</div>'
+        +   '<div class="card card-pad mt-16" id="kdFields">'
+        +     '<div class="between wrap-flex gap-8" style="align-items:flex-start;">'
+        +       '<div><h4 style="margin:0;">Isi kartu dari data field</h4>'
+        +       '<p class="tiny faint mt-8" style="margin-bottom:0;">Baris data tambahan di kartu (di bawah blok data depan / info belakang). Pilih field dari form pendaftaran atau data bawaan — nilai diambil dari data anggota.</p></div>'
+        +       (canEdit ? '<button type="button" class="btn btn-soft btn-sm" id="kdFieldAdd">+ Tambah baris</button>' : '')
+        +     '</div>'
+        +     '<div class="stack gap-8 mt-16" id="kdFieldRows"></div>'
+        +   '</div>'
         +   '<div class="row gap-8 mt-16" id="kdSideBtns">'
         +     '<button class="btn btn-soft btn-sm" data-side="front">Tampak Depan</button>'
         +     '<button class="btn btn-ghost btn-sm" data-side="back">Tampak Belakang</button>'
@@ -1721,6 +1740,53 @@
 
       function el(id){ return document.getElementById(id); }
       function sideObj(){ return t[activeSide]; }
+      function rowsFor(side){
+        if(!t[side]) t[side] = {};
+        if(!Array.isArray(t[side].fields)) t[side].fields = [];
+        return t[side].fields;
+      }
+      function fieldLabel(key){
+        var f = fieldOpts.find(function(x){ return x.key === key; });
+        return f ? f.label : key;
+      }
+      function renderFieldRows(){
+        var box = el('kdFieldRows'); if(!box) return;
+        var rows = rowsFor(activeSide);
+        if(!rows.length){ box.innerHTML = '<p class="tiny faint" style="margin:0;">Belum ada baris tambahan — kartu memakai isi bawaan.</p>'; return; }
+        var opts = function(sel){
+          var groups = {};
+          fieldOpts.forEach(function(f){ (groups[f.group || 'Lainnya'] = groups[f.group || 'Lainnya'] || []).push(f); });
+          var h = '<option value="">— pilih field —</option>';
+          Object.keys(groups).forEach(function(g){
+            h += '<optgroup label="' + esc(g) + '">' + groups[g].map(function(f){ return '<option value="' + esc(f.key) + '"' + (sel === f.key ? ' selected' : '') + '>' + esc(f.label) + '</option>'; }).join('') + '</optgroup>';
+          });
+          return h;
+        };
+        box.innerHTML = rows.map(function(r, i){
+          return '<div class="row gap-8 wrap-flex" style="align-items:center;flex-wrap:nowrap;">'
+            + '<select class="select kd-fsel" data-i="' + i + '" style="min-height:38px;flex:1;"' + (canEdit ? '' : ' disabled') + '>' + opts(r.field) + '</select>'
+            + '<div class="input-shell kd-flbl" style="flex:1;"><input value="' + esc(r.label || '') + '" placeholder="' + esc(fieldLabel(r.field)) + '" data-i="' + i + '"' + (canEdit ? '' : ' disabled') + '></div>'
+            + (canEdit ? '<button type="button" class="btn btn-ghost btn-sm kd-fdel" data-i="' + i + '" title="Hapus baris" style="color:var(--danger);">✕</button>' : '')
+            + '</div>';
+        }).join('');
+        if(!canEdit) return;
+        box.querySelectorAll('.kd-fsel').forEach(function(s){
+          s.onchange = function(){ rowsFor(activeSide)[+s.dataset.i].field = s.value; preview(); };
+        });
+        box.querySelectorAll('.kd-flbl input').forEach(function(inp){
+          inp.oninput = function(){ rowsFor(activeSide)[+inp.dataset.i].label = inp.value; preview(); };
+        });
+        box.querySelectorAll('.kd-fdel').forEach(function(b){
+          b.onclick = function(){ rowsFor(activeSide).splice(+b.dataset.i, 1); renderFieldRows(); preview(); };
+        });
+      }
+      var addBtn = el('kdFieldAdd');
+      if(addBtn) addBtn.onclick = function(){
+        var rows = rowsFor(activeSide);
+        if(rows.length >= 8){ showToast('Maksimal 8 baris per sisi kartu.', 'danger'); return; }
+        rows.push({ field: '', label: '' });
+        renderFieldRows();
+      };
       function cssColor(v){ return /^#[0-9a-fA-F]{3,8}$/.test(v || '') ? v : (activeSide === 'front' ? '#e9d826' : '#f5efdc'); }
 
       function panel(){
@@ -1815,6 +1881,26 @@
              + '.kd-live .kb-sealcol{' + (s.seal_visible === false ? 'display:none;' : '') + '}'
              + '.kd-live .kb-nama{font-size:' + (+s.nama_size || 4.4) + 'cqw;}';
         }
+        /* Baris pemetaan field (isi kartu customizable) — nilai contoh */
+        var PREV_VALS = {
+          nama: member.nama, kode_unik: member.kode_unik,
+          wilayah: (member.desa || '') + (member.desa && member.kecamatan ? ' - ' : '') + (member.kecamatan || ''),
+          desa: member.desa, kecamatan: member.kecamatan,
+          org_nama: 'DPD Nusantara Bersatu', org_wilayah: 'Kabupaten Tulungagung',
+          npapg: '••••••••••••••••', jabatan: 'Anggota', status: 'Aktif',
+          qr_url: memberUrl, exp_label: 'Feb 2029', gender: 'Laki-laki'
+        };
+        function prevRowsHtml(side){
+          var rows = (t[side] && t[side].fields) || [];
+          return rows.map(function(r){
+            if(!r || !r.field) return '';
+            var v = PREV_VALS[r.field] != null ? PREV_VALS[r.field] : ('Contoh ' + (r.label || fieldLabel(r.field)));
+            var lbl = r.label || '';
+            return side === 'back'
+              ? '<div class="kb-extra">' + (lbl ? '<b>' + esc2(lbl) + '</b>' : '') + esc2(v) + '</div>'
+              : '<div class="kf-extra">' + (lbl ? esc2(lbl) + ': ' : '') + esc2(v) + '</div>';
+          }).join('');
+        }
         var bgCss = 'background-color:' + cssColor(s.bg_color) + ';';
         if(s.bg_image){
           var fit = s.bg_fit === 'contain' ? 'contain' : (s.bg_fit === 'stretch' ? '100% 100%' : 'cover');
@@ -1829,13 +1915,13 @@
               ? '<div class="kf-qr" data-kddrag="qr">' + qrSvg + '</div>'
                 + '<div class="kf-org">DPD NUSANTARA BERSATU</div><div class="kf-sub">KABUPATEN TULUNGAGUNG</div>'
                 + '<div class="kf-photo" data-kddrag="photo"><span class="kf-ini">AF</span></div>'
-                + '<div class="kf-data" data-kddrag="data"><div class="kf-nama">' + esc2(member.nama) + '</div><div class="kf-npapg"><span class="lbl">NPAPG</span>••••••••••••••••</div><div class="kf-wil">' + esc2((member.desa || '') + (member.desa && member.kecamatan ? ' - ' : '') + (member.kecamatan || '')) + '</div><div class="kf-wil2">Kabupaten Tulungagung</div></div>'
+                + '<div class="kf-data" data-kddrag="data"><div class="kf-nama">' + esc2(member.nama) + '</div><div class="kf-npapg"><span class="lbl">NPAPG</span>••••••••••••••••</div><div class="kf-wil">' + esc2((member.desa || '') + (member.desa && member.kecamatan ? ' - ' : '') + (member.kecamatan || '')) + '</div><div class="kf-wil2">Kabupaten Tulungagung</div>' + prevRowsHtml('front') + '</div>'
                 + '<div class="kf-code" data-kddrag="title"><div class="rule"></div><div class="val">' + esc2(s.title_text || 'Kartu Tanda Anggota') + '</div></div>'
               : '<div class="kb-top"><span class="t">' + esc2(s.header_text || 'Kartu Tanda Anggota') + '</span><span class="o">DPD Nusantara Bersatu</span></div><div class="kb-toprule"></div><div class="kb-mag"></div>'
                 + '<div class="kb-body"><div class="kb-qrwrap"><div class="kb-qr">' + qrSvg + '</div><div class="kb-qrhint">Pindai untuk verifikasi</div></div>'
                 + '<div class="kb-info"><div class="kb-nama">' + esc2(member.nama) + '</div><div class="kb-role">Anggota · ' + esc2((member.desa || '') + ', ' + (member.kecamatan || '')) + '</div>'
                 + '<div class="kb-chips"><div class="kb-chip"><span class="k">NPAPG</span><span class="v">••••••••••••••••</span></div><div class="kb-chip"><span class="k">No. Kartu</span><span class="v">' + esc2(member.kode_unik) + '</span></div></div>'
-                + '<div class="kb-url">sikeda.id/kta/' + esc2(String(member.kode_unik || '').toLowerCase()) + '</div></div>'
+                + '<div class="kb-url">sikeda.id/kta/' + esc2(String(member.kode_unik || '').toLowerCase()) + '</div>' + prevRowsHtml('back') + '</div>'
                 + '<div class="kb-sealcol"><div class="kb-seal"><span class="s1">✓</span><span class="s2">Resmi</span></div><div class="kb-valid"><span class="k">SD</span> 2031</div></div></div>')
           + '</div></div></div>';
         wireDrag();
@@ -2128,6 +2214,7 @@
           activeSide = this.getAttribute('data-side');
           el('kdSideBtns').querySelectorAll('[data-side]').forEach(function(x){ x.className = x.getAttribute('data-side') === activeSide ? 'btn btn-soft btn-sm' : 'btn btn-ghost btn-sm'; });
           panel();
+          renderFieldRows();
         };
       });
 
@@ -2155,6 +2242,7 @@
       renderPresetSel();
       wirePresets();
       panel();
+      renderFieldRows();
     },
 
     webHome: async function(host, role){ return VIEWS._contentEditor(host, role, 'home'); },

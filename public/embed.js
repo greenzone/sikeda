@@ -8,6 +8,8 @@
 
    Semua style di-scope di bawah .sikeda-embed — tidak mengganggu
    CSS host. Data tetap masuk ke database website utama.
+   Daftar field mengikuti pengaturan dinamis dari dashboard
+   (/api/public/reg-fields) — field tambahan ikut tampil.
    ============================================================ */
 (function(){
   'use strict';
@@ -19,6 +21,23 @@
     var a = document.createElement('a'); a.href = s;
     return a.protocol + '//' + a.host;
   })();
+
+  /* Field inti (default) — label/wajib/aktif bisa dioverride konfigurasi */
+  var BASE_FIELDS = [
+    { key:'nama',          label:'Nama lengkap',        type:'text',   required:true,  active:true, locked:true,  full:true },
+    { key:'nik',           label:'NIK',                 type:'text',   required:true,  active:true, locked:true },
+    { key:'gender',        label:'Jenis kelamin',       type:'select', required:true,  active:true, locked:true, options:['Laki-laki','Perempuan'] },
+    { key:'tempat_lahir',  label:'Tempat lahir',        type:'text',   required:false, active:true },
+    { key:'tanggal_lahir', label:'Tanggal lahir',       type:'date',   required:false, active:true },
+    { key:'pekerjaan',     label:'Pekerjaan',           type:'text',   required:false, active:true, full:true },
+    { key:'kecamatan',     label:'Kecamatan',           type:'wilayah',required:true,  active:true, locked:true },
+    { key:'desa',          label:'Desa',                type:'wilayah',required:true,  active:true, locked:true },
+    { key:'alamat',        label:'Alamat',              type:'text',   required:false, active:true, full:true },
+    { key:'whatsapp',      label:'WhatsApp',            type:'tel',    required:true,  active:true, locked:true },
+    { key:'email',         label:'Email',               type:'email',  required:false, active:true },
+    { key:'telegram',      label:'Telegram (opsional)', type:'text',   required:false, active:true, full:true }
+  ];
+  var PLACEHOLDERS = { nik:'16 digit', whatsapp:'08…', telegram:'@username / chat id', alamat:'Nama jalan, RT/RW' };
 
   window.sikedaDaftar = function(targetSel){
     var root = typeof targetSel === 'string' ? document.querySelector(targetSel) : targetSel;
@@ -36,8 +55,9 @@
       '.sd-head p{margin:6px 0 0;font-size:.8rem;color:rgba(238,242,248,.72);line-height:1.5;}' +
       '.sd-body{padding:22px 24px;display:grid;gap:13px;}' +
       '.sd-f label{display:block;font-size:.76rem;font-weight:700;margin-bottom:5px;}' +
-      '.sd-f input,.sd-f select{width:100%;height:44px;border:1.5px solid var(--sd-line);border-radius:11px;padding:0 12px;font-size:.9rem;font-family:inherit;background:#fff;outline:none;}' +
-      '.sd-f input:focus,.sd-f select:focus{border-color:var(--sd-navy2);box-shadow:0 0 0 3px rgba(18,37,68,.12);}' +
+      '.sd-f input,.sd-f select,.sd-f textarea{width:100%;min-height:44px;border:1.5px solid var(--sd-line);border-radius:11px;padding:10px 12px;font-size:.9rem;font-family:inherit;background:#fff;outline:none;}' +
+      '.sd-f textarea{resize:vertical;}' +
+      '.sd-f input:focus,.sd-f select:focus,.sd-f textarea:focus{border-color:var(--sd-navy2);box-shadow:0 0 0 3px rgba(18,37,68,.12);}' +
       '.sd-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}' +
       '.sd-btn{grid-column:1/-1;height:50px;border:none;border-radius:13px;background:linear-gradient(140deg,#eac06a,#dda52e);color:#081120;font-weight:800;font-size:.95rem;cursor:pointer;font-family:inherit;}' +
       '.sd-btn:disabled{opacity:.55;cursor:wait;}' +
@@ -53,43 +73,92 @@
       '<div class="sd-head"><h3>Pendaftaran Anggota</h3>' +
       '<p>DPD Nusantara Bersatu — Kab. Tulungagung.<br>Isi data dengan benar; verifikasi dilakukan pengurus dalam 1–2 hari kerja.</p></div>' +
       '<form class="sd-body" id="sdForm" autocomplete="off">' +
-      '<div class="sd-f"><label>Nama lengkap *</label><input name="nama" required minlength="3"></div>' +
-      '<div class="sd-2">' +
-      '<div class="sd-f"><label>NIK *</label><input name="nik" required maxlength="16" inputmode="numeric" placeholder="16 digit"></div>' +
-      '<div class="sd-f"><label>Jenis kelamin *</label><select name="gender" required><option value="">— pilih —</option><option>Laki-laki</option><option>Perempuan</option></select></div>' +
-      '</div>' +
-      '<div class="sd-2">' +
-      '<div class="sd-f"><label>Tempat lahir</label><input name="tempat_lahir"></div>' +
-      '<div class="sd-f"><label>Tanggal lahir</label><input name="tanggal_lahir" type="date"></div>' +
-      '</div>' +
-      '<div class="sd-f"><label>Pekerjaan</label><input name="pekerjaan"></div>' +
-      '<div class="sd-2">' +
-      '<div class="sd-f"><label>Kecamatan *</label><select name="kecamatan" id="sdKec" required><option value="">memuat…</option></select></div>' +
-      '<div class="sd-f"><label>Desa *</label><select name="desa" id="sdDesa" required><option value="">—</option></select></div>' +
-      '</div>' +
-      '<div class="sd-f"><label>Alamat</label><input name="alamat"></div>' +
-      '<div class="sd-2">' +
-      '<div class="sd-f"><label>WhatsApp *</label><input name="whatsapp" required inputmode="numeric" placeholder="08…"></div>' +
-      '<div class="sd-f"><label>Email</label><input name="email" type="email"></div>' +
-      '</div>' +
-      '<div class="sd-f"><label>Telegram (opsional)</label><input name="telegram" placeholder="@username / chat id"></div>' +
+      '<div id="sdFields" style="display:contents;"></div>' +
       '<button class="sd-btn" type="submit">Kirim Pendaftaran</button>' +
       '<div class="sd-note" id="sdErr" style="color:#bb4332;display:none;"></div>' +
       '<div class="sd-note">Data terkirim ke sistem keanggotaan resmi (SIKEDA). Status pengajuan dinotifikasikan via WhatsApp/Telegram/Email.</div>' +
       '</form>';
 
-    /* Wilayah dari portal */
-    var WIL = {};
-    fetch(PORTAL + '/api/public/branding').catch(function(){ return null; });
-    fetch(PORTAL + '/api/public/wilayah').then(function(r){ return r.json(); }).then(function(j){
-      WIL = j.data || {};
+    var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+
+    /* ---------- Bangun daftar field aktif (inti + tambahan) ---------- */
+    var FIELDS = BASE_FIELDS.slice();
+    fetch(PORTAL + '/api/public/reg-fields').then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      if(!j || !j.ok || !Array.isArray(j.data)) return;
+      /* override atribut field inti dari konfigurasi */
+      j.data.forEach(function(f){
+        var b = FIELDS.find(function(x){ return x.key === f.key; });
+        if(b){
+          b.label = f.label || b.label;
+          b.required = b.locked ? b.required : !!f.required;
+          b.active = b.locked ? true : f.active !== false;
+          b.options = f.options && f.options.length ? f.options : b.options;
+          b.placeholder = f.placeholder || b.placeholder;
+        } else if(String(f.key).indexOf('reg_extra_') === 0){
+          FIELDS.push({ key:f.key, label:f.label, type:f.type || 'text', required:!!f.required, active:true, options:f.options, placeholder:f.placeholder, half:true });
+        }
+      });
+      renderFields();
+    }).catch(function(){ renderFields(); });
+
+    function fieldHtml(f){
+      var id = 'sd_' + f.key;
+      var req = f.required ? ' required' : '';
+      var star = f.required ? ' *' : '';
+      var ph = f.placeholder || PLACEHOLDERS[f.key] || '';
+      var inner;
+      if(f.type === 'select'){
+        inner = '<select name="' + f.key + '" id="' + id + '"' + req + '><option value="">— pilih —</option>' +
+          (f.options || []).map(function(o){ return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
+      } else if(f.type === 'textarea'){
+        inner = '<textarea name="' + f.key + '" id="' + id + '" rows="2"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + req + '></textarea>';
+      } else if(f.type === 'wilayah'){
+        inner = f.key === 'kecamatan'
+          ? '<select name="kecamatan" id="sdKec"' + req + '><option value="">memuat…</option></select>'
+          : '<select name="desa" id="sdDesa"' + req + ' disabled><option value="">—</option></select>';
+      } else {
+        var t = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : (f.type === 'date' ? 'date' : (f.type === 'number' ? 'number' : 'text')));
+        inner = '<input name="' + f.key + '" id="' + id + '" type="' + t + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') +
+          (f.key === 'nik' ? ' maxlength="16" inputmode="numeric"' : '') + (f.key === 'whatsapp' ? ' inputmode="numeric"' : '') + req + '>';
+      }
+      return '<div class="sd-f"><label for="' + id + '">' + esc(f.label) + star + '</label>' + inner + '</div>';
+    }
+
+    function renderFields(){
+      var host = document.getElementById('sdFields');
+      if(!host) return;
+      var act = FIELDS.filter(function(f){ return f.active !== false; });
+      var html = '', pair = [];
+      function flush(){
+        if(pair.length === 1) html += '<div class="sd-2">' + pair[0] + '<div></div></div>';
+        else if(pair.length) html += '<div class="sd-2">' + pair.join('') + '</div>';
+        pair = [];
+      }
+      act.forEach(function(f){
+        if(f.full){ flush(); html += fieldHtml(f); return; }
+        pair.push(fieldHtml(f));
+        if(pair.length === 2) flush();
+      });
+      flush();
+      host.innerHTML = html;
+      wireWilayah();
+    }
+
+    /* ---------- Wilayah dari portal ---------- */
+    function wireWilayah(){
       var kec = document.getElementById('sdKec');
-      kec.innerHTML = '<option value="">— pilih —</option>' + Object.keys(WIL).map(function(k){ return '<option>' + k + '</option>'; }).join('');
-      kec.onchange = function(){
-        var d = document.getElementById('sdDesa');
-        d.innerHTML = '<option value="">— pilih —</option>' + (WIL[kec.value] || []).map(function(x){ return '<option>' + x + '</option>'; }).join('');
-      };
-    }).catch(function(){});
+      var desa = document.getElementById('sdDesa');
+      if(!kec) return;
+      fetch(PORTAL + '/api/public/wilayah').then(function(r){ return r.json(); }).then(function(j){
+        var WIL = (j && j.data) || {};
+        kec.innerHTML = '<option value="">— pilih —</option>' + Object.keys(WIL).map(function(k){ return '<option>' + esc(k) + '</option>'; }).join('');
+        kec.onchange = function(){
+          desa.innerHTML = '<option value="">— pilih —</option>' + (WIL[kec.value] || []).map(function(x){ return '<option>' + esc(x) + '</option>'; }).join('');
+          desa.disabled = !kec.value;
+        };
+      }).catch(function(){});
+    }
+    wireWilayah();
 
     function showErr(msg){
       var el = document.getElementById('sdErr');
@@ -104,19 +173,19 @@
       e.preventDefault();
       clearErr();
       var f = e.target, btn = f.querySelector('.sd-btn');
-      var val = function(n){ return f.elements[n].value.trim(); };
-      if(val('nik').replace(/\D/g,'').length !== 16){ showErr('NIK harus tepat 16 digit.'); return; }
-      if(!val('nama') || val('nama').length < 3){ showErr('Nama minimal 3 karakter.'); return; }
+      var val = function(n){ var el = f.elements[n]; return el ? el.value.trim() : ''; };
+      var body = {};
+      FIELDS.forEach(function(f2){
+        if(f2.active !== false && f2.type !== 'wilayah') body[f2.key] = val(f2.key);
+      });
+      body.kecamatan = val('kecamatan'); body.desa = val('desa');
+      if(body.nik && body.nik.replace(/\D/g,'').length !== 16){ showErr('NIK harus tepat 16 digit.'); return; }
+      if('nama' in body && (!body.nama || body.nama.length < 3)){ showErr('Nama minimal 3 karakter.'); return; }
       btn.disabled = true; btn.textContent = 'Mengirim…';
       fetch(PORTAL + '/api/daftar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nama: val('nama'), nik: val('nik'), gender: val('gender'),
-          tempat_lahir: val('tempat_lahir'), tanggal_lahir: val('tanggal_lahir'),
-          pekerjaan: val('pekerjaan'), kecamatan: val('kecamatan'), desa: val('desa'),
-          alamat: val('alamat'), whatsapp: val('whatsapp'), telegram: val('telegram'), email: val('email')
-        })
+        body: JSON.stringify(body)
       }).then(function(r){ return r.json().then(function(j){ return { code: r.status, j: j }; });      }).then(function(res){
         if(!res.j.ok){
           btn.disabled = false; btn.textContent = 'Kirim Pendaftaran';

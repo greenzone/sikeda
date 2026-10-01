@@ -56,6 +56,18 @@ module.exports = async (req, res) => {
       return;
     }
 
+    /* Fallback aset branding default (folder favicon/) — dipakai bila
+       admin belum mengunggah favicon/logo/avatar sendiri. */
+    const BRAND_FALLBACKS = {
+      '/favicon.ico': '/favicon/favicon.ico',
+      '/apple-touch-icon.png': '/favicon/apple-touch-icon.png',
+      '/site.webmanifest': '/favicon/site.webmanifest',
+      '/web-app-manifest-192x192.png': '/favicon/web-app-manifest-192x192.png',
+      '/web-app-manifest-512x512.png': '/favicon/web-app-manifest-512x512.png',
+      '/favicon-96x96.png': '/favicon/favicon-96x96.png'
+    };
+    if(BRAND_FALLBACKS[p]) p = BRAND_FALLBACKS[p];
+
     /* Static publik */
     const root = path.join(__dirname, '..', 'public');
     const full = path.join(root, p);
