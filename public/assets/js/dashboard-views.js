@@ -160,6 +160,15 @@
     + '.pg-mrow .pg-mrow-meta{margin-top:6px;font-size:.72rem;color:var(--muted);}'
     + '.pg-mrow .row-actions{display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line-soft,rgba(0,0,0,.07));}'
     + '@media (max-width:760px){ .ck-prev-frame{height:480px;} }'
+    /* Pratinjau reset & tombol pengaturan */
+    + '.st-sep{width:1px;height:22px;background:var(--line);margin:0 2px;flex-shrink:0;}'
+    + '.rp-sheet{width:min(680px,100%);}'
+    + '.rp-list{max-height:min(44vh,420px);overflow:auto;border:1px solid var(--line);border-radius:12px;padding:4px 0;}'
+    + '.rp-row{padding:10px 14px;border-bottom:1px solid var(--line-soft,rgba(0,0,0,.06));}'
+    + '.rp-row:last-child{border-bottom:none;}'
+    + '.rp-key{font-family:var(--font-mono,monospace);font-size:.74rem;font-weight:700;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}'
+    + '.rp-vals{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-top:5px;font-size:.76rem;word-break:break-word;}'
+    + '@media (max-width:560px){ .rp-vals{grid-template-columns:1fr;} }'
     /* Sticky toolbar daftar anggota (di bawah topbar) */
     + '.list-sticky{position:sticky;top:calc(var(--appbar-h) + 8px);z-index:30;background:rgba(246,244,238,.94);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--r-m);box-shadow:var(--shadow-float);padding:12px 14px;margin-bottom:14px;}'
     + '@media (max-width:1000px){ .list-sticky{top:8px;} }'
@@ -2967,7 +2976,12 @@
         ? '<div class="sticky-save"><button class="btn btn-primary" id="stSave">Simpan Pengaturan</button>'
           + '<button class="btn btn-ghost btn-sm" id="stResetDefault" title="Pulihkan SEMUA pengaturan ke tatanan default tersimpan" style="color:var(--danger);">Reset ke Default</button>'
           + '<button class="btn btn-soft btn-sm" id="stSetDefault" title="Abadikan tatanan tersimpan saat ini sebagai default">Jadikan Default</button>'
-          + '<span class="tiny faint" id="stDefaultInfo">' + defInfoTxt + '</span></div>'
+          + '<span class="tiny faint" id="stDefaultInfo">' + defInfoTxt + '</span>'
+          + '<span class="st-sep"></span>'
+          + '<button class="btn btn-soft btn-sm" id="stExport" title="Unduh seluruh pengaturan sebagai berkas JSON">Cadangkan (JSON)</button>'
+          + '<button class="btn btn-soft btn-sm" id="stImportBtn" title="Pulihkan pengaturan dari berkas cadangan JSON">Pulihkan…</button>'
+          + '<input type="file" id="stImportFile" accept="application/json,.json" style="display:none;">'
+          + '</div>'
         : '';
 
       function logoTile(kind, label, pathVal){
@@ -3609,15 +3623,58 @@
       var resetDef = document.getElementById('stResetDefault');
       if(resetDef){
         resetDef.onclick = async function(){
-          if(!confirm('Pulihkan SEMUA pengaturan ke tatanan default tersimpan?\n\nSemua perubahan setelah default diabadikan akan HILANG — termasuk logo, tema, konten halaman, kredensial gateway, dan beban sistem.\n\nLanjutkan?')) return;
           resetDef.disabled = true;
+          var changes = [];
           try {
-            var r = await SIKAPI.post('/settings/reset', {});
-            showToast(r.message || 'Pengaturan dipulihkan ke default.', 'success', 5200);
-            return VIEWS.pengaturan(host, role);
+            var p = await SIKAPI.get('/settings/reset-preview');
+            changes = (p.data && p.data.changes) || [];
           } catch(e){
             showToast(e.message, 'danger', 6500);
             resetDef.disabled = false;
+            return;
+          }
+          if(!p.data || !p.data.hasDefault){
+            showToast('Belum ada default tersimpan — klik "Jadikan Default" dulu.', 'danger', 6500);
+            resetDef.disabled = false;
+            return;
+          }
+          resetDef.disabled = false;
+          var rowsHtml = changes.length
+            ? changes.map(function(c){
+                var isAdd = c.default !== null && c.current === null;
+                var isDel = c.current !== null && c.default === null;
+                var tag = isAdd ? '<span class="badge badge-success">baru</span>' : (isDel ? '<span class="badge badge-warn">akan dihapus</span>' : '<span class="badge badge-info">berubah</span>');
+                return '<div class="rp-row"><div class="rp-key">' + esc(c.kunci) + ' ' + tag + '</div>'
+                  + '<div class="rp-vals"><div><span class="tiny faint">kini</span> ' + (c.current === null ? '<i class="tiny faint">(tidak ada)</i>' : esc(c.current)) + '</div>'
+                  + '<div><span class="tiny faint">default</span> ' + (c.default === null ? '<i class="tiny faint">(tidak ada)</i>' : esc(c.default)) + '</div></div></div>';
+              }).join('')
+            : '<p class="small muted">Tidak ada perbedaan — tatanan saat ini sudah sama dengan default.</p>';
+          var orgNama = ((res.data && res.data.org_nama) || 'organisasi').trim();
+          openSheet(
+            '<h3 class="display-m">Pratinjau Reset Pengaturan</h3>'
+            + '<p class="small muted mt-8">Semua pengaturan akan dipulihkan ke tatanan default tersimpan. ' + changes.length + ' kunci berbeda dari default:</p>'
+            + '<div class="rp-list mt-16">' + rowsHtml + '</div>'
+            + '<div class="field mt-16"><label>Ketik "' + esc(orgNama) + '" untuk mengonfirmasi</label>'
+            + '<div class="input-shell"><input id="rpConfirm" autocomplete="off" placeholder="' + esc(orgNama) + '"></div></div>'
+            + '<div class="row gap-12 mt-16 wrap-flex"><button class="btn btn-danger grow" id="rpGo" disabled>Reset Sekarang</button><button class="btn btn-soft" data-close>Batal</button></div>',
+            { centered: true, sheetClass: 'rp-sheet' }
+          );
+          var inp = document.getElementById('rpConfirm');
+          var go = document.getElementById('rpGo');
+          if(inp && go){
+            inp.addEventListener('input', function(){ go.disabled = inp.value.trim().toLowerCase() !== orgNama.toLowerCase(); });
+            go.onclick = async function(){
+              go.disabled = true; go.textContent = 'Mereset…';
+              try {
+                var r = await SIKAPI.post('/settings/reset', { confirm: inp.value.trim() });
+                document.querySelector('.modal-backdrop [data-close]') && document.querySelector('.modal-backdrop [data-close]').click();
+                showToast(r.message || 'Pengaturan dipulihkan ke default.', 'success', 5200);
+                return VIEWS.pengaturan(host, role);
+              } catch(e){
+                showToast(e.message, 'danger', 6500);
+                go.disabled = false; go.textContent = 'Reset Sekarang';
+              }
+            };
           }
         };
       }
@@ -3633,6 +3690,48 @@
             if(info) info.textContent = 'Default diabadikan baru saja oleh Anda';
           } catch(e){ showToast(e.message, 'danger', 6500); }
           setDef.disabled = false;
+        };
+      }
+
+      /* ---------- Cadangkan & pulihkan (JSON) ---------- */
+      var exportBtn = document.getElementById('stExport');
+      if(exportBtn){
+        exportBtn.onclick = async function(){
+          exportBtn.disabled = true;
+          try {
+            var r = await fetch(SIKAPI.base + '/settings/export', { headers: { Authorization: 'Bearer ' + SIKAPI.token() } });
+            if(!r.ok) throw new Error('Gagal mengekspor (HTTP ' + r.status + ').');
+            var blob = await r.blob();
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'sikeda-settings-' + new Date().toISOString().slice(0, 10) + '.json';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+            showToast('Cadangan pengaturan diunduh — simpan berkas ini di tempat aman.', 'success', 5200);
+          } catch(e){ showToast(e.message, 'danger', 6500); }
+          exportBtn.disabled = false;
+        };
+      }
+      var importFile = document.getElementById('stImportFile');
+      var importBtn = document.getElementById('stImportBtn');
+      if(importBtn && importFile){
+        importBtn.onclick = function(){ importFile.value = ''; importFile.click(); };
+        importFile.onchange = async function(){
+          var f = importFile.files && importFile.files[0];
+          if(!f) return;
+          if(f.size > 8 * 1024 * 1024){ showToast('Berkas cadangan maksimal 8 MB.', 'danger'); return; }
+          var j = null;
+          try { j = JSON.parse(await f.text()); } catch(e){ showToast('Berkas bukan JSON yang valid.', 'danger'); return; }
+          var data = (j && j.data && typeof j.data === 'object') ? j.data : (j && typeof j === 'object' ? j : null);
+          if(!data || !Object.keys(data).length){ showToast('Tidak ada pengaturan di dalam berkas.', 'danger'); return; }
+          var mode = confirm('Pilih mode pemulihan:\n\nOK = REPLACE — hapus semua pengaturan tersimpan, lalu isi dari berkas.\nBatal = MERGE — hanya menimpa kunci yang ada di berkas.') ? 'replace' : 'merge';
+          if(!confirm('Pulihkan ' + Object.keys(data).length + ' kunci dari berkas (mode ' + mode.toUpperCase() + ')?')) return;
+          importBtn.disabled = true;
+          try {
+            var r = await SIKAPI.post('/settings/import', { kind: j.kind, data: data, mode: mode });
+            showToast(r.message || 'Pengaturan dipulihkan.', 'success', 5200);
+            return VIEWS.pengaturan(host, role);
+          } catch(e){ showToast(e.message, 'danger', 6500); importBtn.disabled = false; }
         };
       }
       var waTest = document.getElementById('stWaTest');

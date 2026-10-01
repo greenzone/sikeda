@@ -980,3 +980,28 @@ table.table tbody tr:hover{background:#fbf9f3;}
 .gw-status.is-err{background:rgba(180,35,42,.07);border-color:rgba(180,35,42,.26);color:#a3252c;}
 .gw-status.is-err .gws-dot{background:#b4232a;box-shadow:0 0 0 3px rgba(180,35,42,.14);}
 .gw-status .gws-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* =====================  Responsive polish global (v2)  ===================== */
+.sticky-save{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.sticky-save .btn{flex-shrink:0;}
+@media (max-width:680px){
+  /* Sticky bar pengaturan: tombol utama tetap menonjol, sisanya flow rapi */
+  .sticky-save{padding:12px 14px;}
+  .sticky-save .tiny{flex-basis:100%;order:9;}
+  .sticky-save .st-sep{display:none;}
+  /* Tabel lebar digulir horizontal, tidak merobek halaman */
+  .table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}
+  /* Ikon aksi baris tetap menyentuh dengan nyaman */
+  .row-actions{gap:8px;}
+  .row-actions .btn{padding:8px 10px;}
+  /* Bottom sheet menyentuh tepi penuh di ponsel */
+  .sheet{max-height:92vh;border-radius:18px 18px 0 0;}
+}
+@media (max-width:480px){
+  /* Tombol lebar penuh berjejak sentuh nyaman */
+  .modal-backdrop .btn-block{min-height:46px;}
+  .row.gap-12.wrap-flex .btn{min-height:42px;}
+  /* Judul & kicker merapat */
+  .dash-title{font-size:1.12rem;}
+  .kicker{font-size:.68rem;}
+}

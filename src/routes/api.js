@@ -624,6 +624,9 @@ router.get('/activity', requireRole('admin','superadmin'), async (req, res) => {
 router.get('/settings', requireRole('admin','superadmin'), async (req, res) => {
   const rows = await q('SELECT kunci, nilai FROM settings');
   const obj = {};
+  /* Default statis dari repo sebagai fallback — pengaturan selalu tampak
+     lengkap meski belum tersimpan di DB instalasi ini. */
+  try { Object.assign(obj, require('../site-defaults').DEFAULTS); } catch(_){}
   rows.forEach(r => obj[r.kunci] = r.nilai);
   /* Superadmin: key API disamarkan sebagian; logo berupa path relatif (bukan data sensitif) */
   if(req.user.level !== 'superadmin' && obj.fonnte_api_key){
@@ -686,11 +689,41 @@ router.post('/settings/default-set', requireRole('superadmin'), async (req, res)
     res.json({ ok: true, message: 'Tatanan tersimpan saat ini diabadikan sebagai default (' + Object.keys(snap.keys).length + ' item).' });
   } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal mengabadikan default.' }); }
 });
+/* Pratinjau perbedaan tatanan saat ini vs default (untuk modal konfirmasi) */
+router.get('/settings/reset-preview', requireRole('admin','superadmin'), async (req, res) => {
+  try {
+    const snap = await readDefaultSnapshot();
+    if(!snap) return res.json({ ok: true, data: { hasDefault: false, changes: [] } });
+    const rows = await q('SELECT kunci, nilai FROM settings');
+    const cur = {};
+    rows.forEach(r => { if(r.kunci !== DEFAULT_SNAPSHOT_KEY) cur[r.kunci] = r.nilai == null ? '' : String(r.nilai); });
+    const keys = new Set([...Object.keys(snap.keys), ...Object.keys(cur)]);
+    const changes = [];
+    keys.forEach(k => {
+      const d = snap.keys[k] == null ? null : String(snap.keys[k]);
+      const c = cur[k] == null ? null : String(cur[k]);
+      if((d || null) !== (c || null)){
+        changes.push({ kunci: k, current: (c || '').slice(0, 90), default: (d || '').slice(0, 90) });
+      }
+    });
+    changes.sort((a, b) => a.kunci.localeCompare(b.kunci));
+    res.json({ ok: true, data: { hasDefault: true, changes } });
+  } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal menyiapkan pratinjau reset.' }); }
+});
+
+/* Reset dengan pengaman: ketik nama organisasi untuk mengonfirmasi.
+   Key snapshot selalu dikecualikan agar reset bisa diulang. */
 router.post('/settings/reset', requireRole('superadmin'), async (req, res) => {
   try {
     const snap = await readDefaultSnapshot();
     if(!snap){
       return res.status(400).json({ error: 'Belum ada default tersimpan — klik "Jadikan Default" dulu untuk mengabadikan tatanan sekarang.' });
+    }
+    const orgRow = await q("SELECT nilai FROM settings WHERE kunci = 'org_nama' LIMIT 1");
+    const orgNama = (orgRow[0] && orgRow[0].nilai) || require('../site-defaults').DEFAULTS.org_nama || '';
+    const typed = String((req.body || {}).confirm || '').trim().toLowerCase();
+    if(!typed || typed !== String(orgNama).trim().toLowerCase()){
+      return res.status(400).json({ error: 'Konfirmasi salah — ketik "' + orgNama + '" untuk melanjutkan reset.' });
     }
     await q('DELETE FROM settings WHERE kunci != ?', [DEFAULT_SNAPSHOT_KEY]);
     const entries = Object.entries(snap.keys);
@@ -700,6 +733,41 @@ router.post('/settings/reset', requireRole('superadmin'), async (req, res) => {
     await logAct(req.user, 'Reset pengaturan ke default', entries.length + ' pengaturan dipulihkan');
     res.json({ ok: true, message: 'Pengaturan dipulihkan ke default (' + entries.length + ' item).', count: entries.length });
   } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal mereset pengaturan.' }); }
+});
+
+/* ============================================================
+   BACKUP / RESTORE pengaturan (superadmin)
+   GET  /api/settings/export → unduh seluruh pengaturan sebagai JSON
+   POST /api/settings/import → pulihkan dari JSON (mode merge/replace)
+   Kredensial ikut diekspor — berkas berisi data sensitif.
+   ============================================================ */
+router.get('/settings/export', requireRole('superadmin'), async (req, res) => {
+  try {
+    const rows = await q('SELECT kunci, nilai FROM settings WHERE kunci != ? ORDER BY kunci', [DEFAULT_SNAPSHOT_KEY]);
+    const data = {};
+    rows.forEach(r => { data[r.kunci] = r.nilai == null ? '' : String(r.nilai); });
+    await logAct(req.user, 'Ekspor pengaturan (JSON)', rows.length + ' kunci');
+    res.set('Content-Disposition', 'attachment; filename="sikeda-settings-' + new Date().toISOString().slice(0, 10) + '.json"');
+    res.json({ ok: true, app: 'SIKEDA', kind: 'settings-backup', exportedAt: new Date().toISOString(), count: rows.length, data });
+  } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal mengekspor pengaturan.' }); }
+});
+router.post('/settings/import', requireRole('superadmin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const data = (b.data && typeof b.data === 'object' && !Array.isArray(b.data)) ? b.data : null;
+    if(!data) return res.status(400).json({ error: 'Berkas cadangan tidak valid (butuh objek "data").' });
+    if(b.kind && b.kind !== 'settings-backup') return res.status(400).json({ error: 'Berkas bukan cadangan pengaturan SIKEDA.' });
+    const entries = Object.entries(data).filter(([k]) => k && k !== DEFAULT_SNAPSHOT_KEY && k.length <= 60);
+    if(!entries.length) return res.status(400).json({ error: 'Tidak ada pengaturan untuk dipulihkan.' });
+    const mode = b.mode === 'replace' ? 'replace' : 'merge';
+    if(mode === 'replace') await q('DELETE FROM settings WHERE kunci != ?', [DEFAULT_SNAPSHOT_KEY]);
+    for(const [k, v] of entries){
+      await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)',
+        [String(k), String(v == null ? '' : v)]);
+    }
+    await logAct(req.user, 'Impor pengaturan (JSON)', entries.length + ' kunci, mode ' + mode);
+    res.json({ ok: true, message: 'Pengaturan dipulihkan: ' + entries.length + ' kunci (mode ' + mode + ').' });
+  } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal mengimpor pengaturan.' }); }
 });
 
 /* ============================================================
@@ -1024,32 +1092,18 @@ router.post('/settings/logo', requireRole('superadmin'), async (req, res) => {
     const key = kind === 'hero' ? 'hero_bg' : (kind === 'favicon' ? 'favicon' : 'logo_' + kind);
     const m = /^data:image\/(png|jpe?g|svg\+xml|webp);base64,(.+)$/i.exec(String(req.body.dataUrl || ''));
     if(!m) return res.status(400).json({ error: 'Format gambar tidak didukung (PNG/JPG/WEBP/SVG).' });
-    const ext = m[1].toLowerCase() === 'svg+xml' ? 'svg' : (m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase());
     const buf = Buffer.from(m[2], 'base64');
     if(buf.length > 512 * 1024) return res.status(400).json({ error: 'Ukuran maksimal 512 KB.' });
-    if(ext !== 'svg' && buf.length < 64) return res.status(400).json({ error: 'Berkas gambar tidak valid.' });
+    if(!/svg\+xml/i.test(m[1]) && buf.length < 64) return res.status(400).json({ error: 'Berkas gambar tidak valid.' });
 
-    const fs = require('fs');
-    const path = require('path');
-    const dir = path.join(__dirname, '..', '..', 'public', 'uploads');
-    fs.mkdirSync(dir, { recursive: true });
-
-    /* Hapus berkas lama agar uploads tidak menumpuk */
-    const prev = await q('SELECT nilai FROM settings WHERE kunci = ?', [key]);
-    if(prev[0] && prev[0].nilai){
-      const oldPath = path.join(__dirname, '..', '..', 'public', prev[0].nilai.replace(/^\/+/, ''));
-      if(oldPath.startsWith(dir) && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-    }
-
-    const fname = 'logo-' + kind + '-' + Date.now() + '.' + ext;
-    fs.writeFileSync(path.join(dir, fname), buf);
-    /* Mirror opsional ke penyimpanan remote (CDN/Cloudinary/Supabase/Drive) — best effort */
-    storage.writeFile('uploads/' + fname, buf).catch(function(){});
-    const rel = 'uploads/' + fname;
-    await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)',
-      [key, rel]);
-    await logAct(req.user, 'Unggah ' + (kind === 'hero' ? 'background hero' : 'logo ' + kind), rel);
-    res.json({ ok: true, path: rel });
+    /* Logo disimpan sebagai DATA DI DATABASE (bukan berkas di disk) —
+       aman untuk serverless (Vercel: disk ephemeral — dulu path /uploads
+       hilang saat redeploy sehingga logo rusak) dan backup DB ikut membawa
+       logo. Nilai path/URL lama otomatis terganti penuh. */
+    const dataUrl = String(req.body.dataUrl);
+    await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)', [key, dataUrl]);
+    await logAct(req.user, 'Unggah ' + (kind === 'hero' ? 'background hero' : 'logo ' + kind), '(' + Math.round(buf.length / 1024) + ' KB, tersimpan di database)');
+    return res.json({ ok: true, path: '/api/public/logo/' + kind });
   } catch(e){
     console.error(e);
     res.status(500).json({ error: 'Gagal menyimpan logo.' });

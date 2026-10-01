@@ -84,6 +84,8 @@ function ensureMigrated(){
     }
     /* Migrasi otomatis berkas lama (serverless: sekali per cold start) */
     require('./src/storage').automigStart(false);
+    /* Pengaturan bawaan untuk instalasi baru + kolom reg_extra (idempoten) */
+    require('./src/boot-init').run();
   })().catch(e => { migrated = null; throw e; });
   return migrated;
 }

@@ -20,6 +20,13 @@ router.get('/branding', async (req, res) => {
       else if(r.kunci === 'site.favicon') data.favicon = r.nilai;
       else data[r.kunci] = r.nilai;
     });
+    /* Logo kini tersimpan sebagai data-URL di DB — kirim URL route ringan
+       (bukan data raksasa di JSON); path /uploads lama tetap dikirim apa adanya. */
+    ['logo_dashboard','logo_landing','favicon','hero_bg'].forEach(k => {
+      if(data[k] && data[k].startsWith('data:')){
+        data[k] = '/api/public/logo/' + (k === 'hero_bg' ? 'hero' : k.replace(/^logo_/, ''));
+      }
+    });
     /* Fallback default utama (folder /favicon) — klien memakai aset
        bawaan ini bila admin belum mengunggah favicon/logo sendiri. */
     if(!data.favicon) data.favicon_default = '/favicon/favicon.svg';
@@ -46,6 +53,32 @@ router.get('/reg-fields', async (req, res) => {
 
 /* GET /api/health — probe sederhana */
 router.get('/health', (req, res) => res.json({ ok: true, uptime: Math.round(process.uptime()) }));
+
+/* GET /api/public/logo/:kind — data logo langsung dari database (tanpa file).
+   kind: dashboard | landing | favicon | hero. Bila nilai tersimpan berupa
+   path lama (/uploads/…) atau URL → dialihkan ke sana (kompatibilitas);
+   bila berupa data-URL → dikirim sebagai gambar; kosong → 404 sehingga
+   klien memakai aset bawaan statis dari repo. */
+router.get('/logo/:kind', (req, res) => {
+  const kind = ['dashboard','landing','favicon','hero'].includes(req.params.kind) ? req.params.kind : null;
+  if(!kind) return res.status(404).json({ error: 'Jenis logo tidak dikenal.' });
+  const key = kind === 'hero' ? 'hero_bg' : (kind === 'landing' ? 'logo_landing' : 'logo_' + kind);
+  q('SELECT nilai FROM settings WHERE kunci = ? LIMIT 1', [key])
+    .then(rows => {
+      const v = rows[0] && rows[0].nilai ? String(rows[0].nilai) : '';
+      if(/^https?:\/\//.test(v) || v.startsWith('/uploads/')) return res.redirect(302, v);
+      const m = /^data:image\/(png|jpe?g|svg\+xml|webp);base64,(.+)$/i.exec(v);
+      if(!m) return res.status(404).json({ error: 'Logo belum diunggah.' });
+      const ext = m[1].toLowerCase();
+      const mime = ext === 'svg+xml' ? 'image/svg+xml' : (ext === 'jpg' ? 'image/jpeg' : 'image/' + ext);
+      const buf = Buffer.from(m[2], 'base64');
+      res.set('Content-Type', mime);
+      res.set('Cache-Control', 'public, max-age=300');
+      res.set('Content-Length', String(buf.length));
+      res.send(buf);
+    })
+    .catch(() => res.status(404).json({ error: 'Logo belum diunggah.' }));
+});
 
 /* GET /api/public/busy-status — status antrian untuk halaman busy.html & poller klien.
    Ringan: tidak menyentuh DB (hanya counter memori proses ini). */
