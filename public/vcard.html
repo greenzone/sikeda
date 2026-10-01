@@ -28,8 +28,20 @@
   .flip-face .kta-face{display:flex;}
   .flip-back{position:absolute;inset:0;transform:rotateY(180deg);}
   .flip-face .kta-card{box-shadow:0 18px 44px -18px rgba(23,16,0,.45);}
+  /* ---------- tatanan aksi & detail (kelas agar rapi di mobile) ---------- */
+  .vc-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .vc-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 20px;}
   @media (max-width:720px){
     .flip-card{max-width:100%;}
+    /* Tombol aksi ditumpuk penuh agar mudah disentuh & teks tidak terpotong */
+    .vc-actions{grid-template-columns:1fr;gap:10px;}
+    .vc-actions .btn{min-height:46px;}
+    /* Detail keanggotaan satu kolom, font & margin dirapatkan */
+    .vc-tiles{grid-template-columns:1fr;gap:8px;padding:0 16px 16px;}
+    .vc-tile{padding:10px 12px;}
+    .vc-tile .t-value{font-size:.88rem;word-break:break-word;}
+    #vcRoot h2.display-m{font-size:1.3rem;}
+    #vcRoot .mt-24{margin-top:18px;}
   }
 </style>
 </head>
@@ -249,7 +261,7 @@
       + '</div>'
 
       /* ---------- Aksi — tepat di bawah pratinjau ---------- */
-      + '<div class="grid-3 mt-16" style="grid-template-columns:repeat(3,1fr);">'
+      + '<div class="vc-actions mt-16">'
       + '  <button class="btn btn-primary" onclick="saveVcf()">'
       + '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
       + '    Simpan Kontak'
@@ -267,7 +279,7 @@
       + '  <div class="card-pad" style="padding-bottom:12px;">'
       + '    <h2 class="display-s">Data keanggotaan</h2>'
       + '  </div>'
-      + '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 20px;">'
+      + '  <div class="vc-tiles">'
       + '    <div class="vc-tile"><div class="t-label">Nama</div><div class="t-value">' + SIK.escape(m.nama) + '</div></div>'
       + '    <div class="vc-tile"><div class="t-label">ID Anggota</div><div class="t-value mono">' + SIK.escape(m.kode_unik) + '</div></div>'
       + '    <div class="vc-tile"><div class="t-label">NPAPG</div><div class="t-value mono">' + SIK.escape(npapg || '—') + '</div></div>'

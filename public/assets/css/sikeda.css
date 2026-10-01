@@ -708,6 +708,8 @@ table.table tbody tr:hover{background:#fbf9f3;}
   /* ---- Landing mobile ---- */
   .display-hero{font-size:clamp(1.85rem,8.4vw,2.5rem);}
   .display-xl{font-size:clamp(1.5rem,6.4vw,2rem);}
+  /* Paragraf hero lebih ringkas di layar kecil agar tidak mendominasi */
+  .hero-dark .lead{font-size:.9rem;line-height:1.6;}
   .section-head{margin-bottom:28px;}
   .hero-grid{gap:30px;padding-top:44px;padding-bottom:52px;}
   .stat-strip{grid-template-columns:1fr 1fr;gap:0;}

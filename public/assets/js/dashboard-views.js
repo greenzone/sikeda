@@ -1665,6 +1665,141 @@
       } catch(e){ showToast(e.message, 'danger', 4500); }
     },
 
+    /* ================= FORM PENDAFTARAN (field dinamis) =================
+       Kelola definisi field formulir pendaftaran publik: label, wajib,
+       aktif, urutan, opsi select, dan field tambahan (reg_extra_*). */
+    formFields: async function(host, role){
+      var canEdit = role === 'superadmin';
+      var res = await SIKAPI.get('/reg-fields');
+      var fields = (res.data || []).slice();
+      var maxExtra = (res.maxExtra != null) ? res.maxExtra : 8;
+
+      host.innerHTML =
+        '<div class="sticky-save between wrap-flex gap-12">'
+        + '<div><h3 class="display-s">Field Form Pendaftaran</h3>'
+        + '<p class="small muted mt-8">Atur label, wajib/tidak, aktif/nonaktif, dan urutan field formulir pendaftaran publik — termasuk halaman daftar &amp; widget embed. '
+        + '<span class="badge badge-neutral mt-8">12 field inti + maks ' + maxExtra + ' tambahan</span>'
+        + '</p></div>'
+        + '<div class="row gap-8 wrap-flex">'
+        + (canEdit
+          ? '<button class="btn btn-soft" id="rfAdd">+ Field tambahan</button><button class="btn btn-ghost" id="rfReset">Kembalikan bawaan</button><button class="btn btn-primary" id="rfSave">Simpan perubahan</button>'
+          : '<span class="badge badge-warn">Hanya superadmin dapat mengubah</span>')
+        + '</div></div>'
+        + '<div class="card mt-16"><div class="stack gap-8" id="rfRows"></div></div>'
+        + '<p class="tiny faint mt-8">Field bertanda 📌 terhubung kolom database &amp; alur verifikasi — selalu aktif dan tidak dapat dihapus. Field tambahan disimpan di kolom reg_extra anggota.</p>';
+
+      function el(id){ return document.getElementById(id); }
+      function isExtra(f){ return String(f.key).indexOf('reg_extra_') === 0; }
+      function reindex(){ fields.forEach(function(f, i){ f.order = i + 1; }); }
+      function typeBadge(t){
+        var m = { text:'Teks', textarea:'Teks panjang', tel:'Telepon', email:'Email', date:'Tanggal', number:'Angka', select:'Pilihan', wilayah:'Wilayah' };
+        return m[t] || t;
+      }
+
+      function rowHtml(f, i){
+        var locked = !!f.locked;
+        return '<div class="rf-row" data-i="' + i + '" style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);">'
+          + '<div class="row gap-8 wrap-flex" style="align-items:center;flex-wrap:nowrap;">'
+          +   '<span class="tiny muted" style="width:22px;text-align:center;flex-shrink:0;">' + (i + 1) + '</span>'
+          +   '<div class="input-shell" style="flex:1;min-width:150px;"><input data-act="label" value="' + esc(f.label) + '" placeholder="' + esc(f.label) + '"' + (canEdit && !locked ? '' : ' disabled') + '></div>'
+          +   '<span class="badge badge-neutral mono" style="flex-shrink:0;">' + esc(f.key) + '</span>'
+          +   '<span class="tiny muted" style="flex-shrink:0;">' + typeBadge(f.type) + '</span>'
+          +   '<button type="button" class="btn btn-sm ' + (f.required ? 'btn-soft' : 'btn-ghost') + '" data-act="req" title="Wajib diisi pengguna"' + (canEdit && !locked ? '' : ' disabled') + ' style="flex-shrink:0;">Wajib: ' + (f.required ? 'Ya' : 'Tidak') + '</button>'
+          +   (locked
+              ? '<span class="badge badge-success" style="flex-shrink:0;">📌 Wajib aktif</span>'
+              : '<button type="button" class="btn btn-sm ' + (f.active ? 'btn-soft' : 'btn-ghost') + '" data-act="act" title="Tampilkan di form"' + (canEdit ? '' : ' disabled') + ' style="flex-shrink:0;">' + (f.active ? 'Aktif' : 'Nonaktif') + '</button>')
+          +   '<span style="margin-left:auto;display:inline-flex;gap:4px;flex-shrink:0;">'
+          +     (canEdit ? '<button type="button" class="btn btn-ghost btn-sm" data-act="up" title="Naikkan urutan">↑</button><button type="button" class="btn btn-ghost btn-sm" data-act="down" title="Turunkan urutan">↓</button>' : '')
+          +     (canEdit && isExtra(f) ? '<button type="button" class="btn btn-ghost btn-sm" data-act="del" title="Hapus field" style="color:var(--danger);">✕</button>' : '')
+          +   '</span>'
+          + '</div>'
+          + (f.type === 'select'
+            ? '<div class="mt-8" style="padding-left:30px;"><label class="tiny muted">Opsi pilihan (pisahkan dengan koma)</label>'
+              + '<textarea class="textarea" data-act="opts" rows="2" placeholder="Opsi 1, Opsi 2, Opsi 3"' + (canEdit && !locked ? '' : ' disabled') + '>' + esc((f.options || []).join(', ')) + '</textarea></div>'
+            : '')
+          + '</div>';
+      }
+
+      function renderRows(){
+        var box = el('rfRows'); if(!box) return;
+        reindex();
+        box.innerHTML = fields.map(rowHtml).join('');
+        if(!canEdit) return;
+        box.querySelectorAll('[data-act]').forEach(function(node){
+          var act = node.dataset.act, i = +node.closest('.rf-row').dataset.i;
+          if(act === 'label'){
+            node.addEventListener('input', function(){ fields[i].label = node.value; });
+          } else if(act === 'opts'){
+            node.addEventListener('input', function(){
+              fields[i].options = node.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+            });
+          } else if(act === 'req'){
+            node.onclick = function(){ fields[i].required = !fields[i].required; renderRows(); };
+          } else if(act === 'act'){
+            node.onclick = function(){ fields[i].active = !fields[i].active; renderRows(); };
+          } else if(act === 'up' || act === 'down'){
+            node.onclick = function(){
+              var j = act === 'up' ? i - 1 : i + 1;
+              if(j < 0 || j >= fields.length) return;
+              var tmp = fields[i]; fields[i] = fields[j]; fields[j] = tmp;
+              renderRows();
+            };
+          } else if(act === 'del'){
+            node.onclick = function(){
+              if(!confirm('Hapus field "' + (fields[i].label || fields[i].key) + '"? Data lama yang sudah tersimpan pada anggota tidak ikut terhapus.')) return;
+              fields.splice(i, 1); renderRows();
+            };
+          }
+        });
+      }
+
+      function addField(){
+        var n = fields.filter(isExtra).length;
+        if(n >= maxExtra){ showToast('Maksimal ' + maxExtra + ' field tambahan.', 'danger'); return; }
+        var label = prompt('Label field baru (mis. "Golongan Darah"):', '');
+        if(label == null) return;
+        label = label.trim().slice(0, 60);
+        if(!label) return;
+        var base = 'reg_extra_' + (label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || ('field_' + (n + 1)));
+        var key = base, k = 2;
+        while(fields.some(function(f){ return f.key === key; })){ key = base + '_' + k; k++; }
+        fields.push({ key: key, label: label, type: 'text', options: null, required: false, active: true, locked: false, order: fields.length + 1, placeholder: '' });
+        renderRows();
+        var box = el('rfRows');
+        if(box && box.lastElementChild) box.lastElementChild.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+
+      async function save(){
+        reindex();
+        var btn = el('rfSave');
+        btn.disabled = true; btn.textContent = 'Menyimpan…';
+        try {
+          var r = await SIKAPI.put('/reg-fields', { fields: fields });
+          showToast(r.message || 'Konfigurasi field pendaftaran tersimpan.', 'success');
+          return VIEWS.formFields(host, role);
+        } catch(e){
+          showToast(e.message, 'danger', 5200);
+          btn.disabled = false; btn.textContent = 'Simpan perubahan';
+        }
+      }
+
+      async function reset(){
+        if(!confirm('Kembalikan semua field pendaftaran ke bawaan? Label kustom & field tambahan akan dihapus dari konfigurasi (data anggota tidak terpengaruh).')) return;
+        var btn = el('rfReset');
+        btn.disabled = true;
+        try {
+          var r = await SIKAPI.del('/reg-fields');
+          showToast(r.message || 'Field pendaftaran kembali ke bawaan.', 'success');
+          return VIEWS.formFields(host, role);
+        } catch(e){ showToast(e.message, 'danger', 5200); btn.disabled = false; }
+      }
+
+      renderRows();
+      var bSave = el('rfSave'); if(bSave) bSave.onclick = save;
+      var bReset = el('rfReset'); if(bReset) bReset.onclick = reset;
+      var bAdd = el('rfAdd'); if(bAdd) bAdd.onclick = addField;
+    },
+
     /* ================= DESAIN KARTU FISIK (template kustom) ================= */
     kartuDesain: async function(host, role){
       var res = await SIKAPI.get('/kta-template');

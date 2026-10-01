@@ -4,6 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Pendaftaran Anggota — SIKEDA</title>
+<script>
+/* Detektor login: pengunjung yang sudah masuk tidak perlu mendaftar ulang —
+   langsung diarahkan ke dashboard. Cek ringan di awal (token + user + exp JWT);
+   keaslian token tetap diverifikasi server saat dipakai. Token basi dibersihkan. */
+(function(){
+  try {
+    var t = localStorage.getItem('sikeda_token');
+    var u = JSON.parse(localStorage.getItem('sikeda_user') || 'null');
+    if(!t || !u) return;
+    var parts = t.split('.');
+    if(parts.length !== 3){ localStorage.removeItem('sikeda_token'); localStorage.removeItem('sikeda_user'); return; }
+    var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    var json = decodeURIComponent(Array.prototype.map.call(atob(b64), function(c){
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    var p = JSON.parse(json);
+    if(p && p.exp && (p.exp * 1000) < (Date.now() - 30000)){
+      localStorage.removeItem('sikeda_token'); localStorage.removeItem('sikeda_user');
+      return;
+    }
+    location.replace('dashboard.html');
+  } catch(e){ /* data sesi tidak terbaca — biarkan form tampil */ }
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
