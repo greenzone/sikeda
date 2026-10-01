@@ -652,6 +652,57 @@ router.put('/settings', requireRole('superadmin'), async (req, res) => {
 });
 
 /* ============================================================
+   RESET PENGATURAN — default yang bisa disesuaikan (superadmin)
+   POST /api/settings/reset         → pulihkan semua pengaturan ke tatanan default
+   POST /api/settings/default-set   → abadikan tatanan tersimpan saat ini sebagai default
+   GET  /api/settings/default-info  → kapan & siapa mengabadikan default
+   Snapshot disimpan di settings 'site_default_snapshot' (JSON) sehingga
+   ikut menempel pada instalasi ini — tidak ada key yang dikerasikan;
+   tatanan apa pun yang ada sekarang bisa dijadikan default.
+   ============================================================ */
+const DEFAULT_SNAPSHOT_KEY = 'site_default_snapshot';
+async function readDefaultSnapshot(){
+  const rows = await q('SELECT nilai FROM settings WHERE kunci = ? LIMIT 1', [DEFAULT_SNAPSHOT_KEY]);
+  let snap = null;
+  if(rows[0] && rows[0].nilai){ try { snap = JSON.parse(rows[0].nilai); } catch(_){ snap = null; } }
+  return (snap && snap.keys && Object.keys(snap.keys).length) ? snap : null;
+}
+router.get('/settings/default-info', requireRole('admin','superadmin'), async (req, res) => {
+  try {
+    const snap = await readDefaultSnapshot();
+    res.json({ ok: true, data: snap ? { setAt: snap._setAt, setBy: snap._setBy } : null });
+  } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal membaca info default.' }); }
+});
+router.post('/settings/default-set', requireRole('superadmin'), async (req, res) => {
+  try {
+    const rows = await q('SELECT kunci, nilai FROM settings');
+    const snap = { keys: {} };
+    rows.forEach(r => { if(r.kunci !== DEFAULT_SNAPSHOT_KEY) snap.keys[r.kunci] = r.nilai; });
+    snap._setAt = new Date().toISOString();
+    snap._setBy = (req.user && req.user.nama) || ('Pengguna ' + (req.user && req.user.id));
+    await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)',
+      [DEFAULT_SNAPSHOT_KEY, JSON.stringify(snap)]);
+    await logAct(req.user, 'Jadikan tatanan tersimpan sebagai default', Object.keys(snap.keys).length + ' pengaturan diabadikan');
+    res.json({ ok: true, message: 'Tatanan tersimpan saat ini diabadikan sebagai default (' + Object.keys(snap.keys).length + ' item).' });
+  } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal mengabadikan default.' }); }
+});
+router.post('/settings/reset', requireRole('superadmin'), async (req, res) => {
+  try {
+    const snap = await readDefaultSnapshot();
+    if(!snap){
+      return res.status(400).json({ error: 'Belum ada default tersimpan — klik "Jadikan Default" dulu untuk mengabadikan tatanan sekarang.' });
+    }
+    await q('DELETE FROM settings WHERE kunci != ?', [DEFAULT_SNAPSHOT_KEY]);
+    const entries = Object.entries(snap.keys);
+    for(const [k, v] of entries){
+      await q('INSERT INTO settings (kunci, nilai) VALUES (?,?) ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)', [k, v]);
+    }
+    await logAct(req.user, 'Reset pengaturan ke default', entries.length + ' pengaturan dipulihkan');
+    res.json({ ok: true, message: 'Pengaturan dipulihkan ke default (' + entries.length + ' item).', count: entries.length });
+  } catch(e){ console.error(e); res.status(500).json({ error: 'Gagal mereset pengaturan.' }); }
+});
+
+/* ============================================================
    PUT /api/members/:id — edit data anggota (superadmin saja)
    Body: field yang boleh diubah (semua opsional)
    ============================================================ */

@@ -2953,12 +2953,21 @@
     /* ================= PENGATURAN ================= */
     pengaturan: async function(host, role){
       var res = await SIKAPI.get('/settings');
+      /* Info default tersimpan (untuk tombol Reset/Jadikan Default) */
+      var defInfo = null;
+      try { var diRes = await SIKAPI.get('/settings/default-info'); defInfo = (diRes && diRes.data) || null; } catch(e){}
       var s = res.data;
       var canEdit = res.canEdit;
 
-      /* Tombol simpan sticky di atas — selalu terjangkau */
+      /* Tombol simpan sticky di atas — selalu terjangkau + reset/abadikan default */
+      var defInfoTxt = defInfo
+        ? 'Default diabadikan ' + new Date(defInfo.setAt).toLocaleString('id-ID', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' oleh ' + esc(defInfo.setBy || '—')
+        : 'Belum ada default tersimpan — abadikan tatanan sekarang';
       var stickyBar = canEdit
-        ? '<div class="sticky-save"><button class="btn btn-primary" id="stSave">Simpan Pengaturan</button><span class="tiny faint">Perubahan tersimpan ke seluruh halaman</span></div>'
+        ? '<div class="sticky-save"><button class="btn btn-primary" id="stSave">Simpan Pengaturan</button>'
+          + '<button class="btn btn-ghost btn-sm" id="stResetDefault" title="Pulihkan SEMUA pengaturan ke tatanan default tersimpan" style="color:var(--danger);">Reset ke Default</button>'
+          + '<button class="btn btn-soft btn-sm" id="stSetDefault" title="Abadikan tatanan tersimpan saat ini sebagai default">Jadikan Default</button>'
+          + '<span class="tiny faint" id="stDefaultInfo">' + defInfoTxt + '</span></div>'
         : '';
 
       function logoTile(kind, label, pathVal){
@@ -3596,7 +3605,36 @@
         } catch(e){ showToast(e.message, 'danger'); }
       };
 
-      /* Uji kirim WhatsApp (Fonnte) — simpan key dulu agar yang diuji persis isi form */
+      /* ---------- Reset ke default & abadikan default ---------- */
+      var resetDef = document.getElementById('stResetDefault');
+      if(resetDef){
+        resetDef.onclick = async function(){
+          if(!confirm('Pulihkan SEMUA pengaturan ke tatanan default tersimpan?\n\nSemua perubahan setelah default diabadikan akan HILANG — termasuk logo, tema, konten halaman, kredensial gateway, dan beban sistem.\n\nLanjutkan?')) return;
+          resetDef.disabled = true;
+          try {
+            var r = await SIKAPI.post('/settings/reset', {});
+            showToast(r.message || 'Pengaturan dipulihkan ke default.', 'success', 5200);
+            return VIEWS.pengaturan(host, role);
+          } catch(e){
+            showToast(e.message, 'danger', 6500);
+            resetDef.disabled = false;
+          }
+        };
+      }
+      var setDef = document.getElementById('stSetDefault');
+      if(setDef){
+        setDef.onclick = async function(){
+          if(!confirm('Abadikan tatanan pengaturan tersimpan saat ini sebagai default? Reset berikutnya akan memulihkan tatanan ini.')) return;
+          setDef.disabled = true;
+          try {
+            var r = await SIKAPI.post('/settings/default-set', {});
+            showToast(r.message || 'Default diabadikan.', 'success', 5200);
+            var info = document.getElementById('stDefaultInfo');
+            if(info) info.textContent = 'Default diabadikan baru saja oleh Anda';
+          } catch(e){ showToast(e.message, 'danger', 6500); }
+          setDef.disabled = false;
+        };
+      }
       var waTest = document.getElementById('stWaTest');
       if(waTest){
         waTest.onclick = async function(){
