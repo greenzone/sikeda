@@ -61,7 +61,7 @@
    ============================================================ */
 const crypto = require('crypto');
 
-const SKIP_PREFIX = ['/uploads/', '/api/public/', '/assets/', '/favicon'];
+const SKIP_PREFIX = ['/uploads/', '/api/public/', '/assets/', '/favicon', '/api/public/busy-status', '/busy-status'];
 const SKIP_FILES = new Set(['/busy.html', '/favicon.ico', '/robots.txt', '/manifest.webmanifest']);
 const ACCEPT_HTML = /text\/html/;
 const EXT_RE = /\.[a-z0-9]{1,8}$/i;
@@ -75,12 +75,27 @@ let lastPeakAt = Date.now();
 const bootAt = Date.now(); /* umur proses — untuk warmup cold start */
 const _ws = parseInt(process.env.BUSY_WARMUP_SECS, 10);
 const WARMUP_MS = (isNaN(_ws) || _ws < 0 ? 60 : _ws) * 1000;
+/* Pemutus alihan: setelah SATU halaman/API dialihkan ke antrian (mode auto),
+   alihan berikutnya ditahan selama durasi ini — bila antrian ternyata terbuka
+   tanpa beban nyata (salah baca sinyal platform serverless), pengguna tidak
+   terjebak loop: dalam ≤2 menit mereka masuk seperti biasa dan polling
+   busy-status tetap memantau sampai antrian menutup sendiri. */
+const _sup = parseInt(process.env.BUSY_SUPPRESS_SECS, 10);
+const SUPPRESS_MS = (isNaN(_sup) || _sup < 0 ? 120 : _sup) * 1000;
+/* Grace pasca-rilis: setelah antrian menutup, ambang lag ditingkatkan sementara
+   (1,5×) selama durasi ini — meredam osilasi EMA di sekitar ambang yang dulu
+   membuat antrian terasa tidak pernah selesai. Beban nyata yang terus-menerus
+   melewati 1,5× ambang tetap membuka antrian kembali. */
+const _gr = parseInt(process.env.BUSY_GRACE_SECS, 10);
+const GRACE_MS = (isNaN(_gr) || _gr < 0 ? 60 : _gr) * 1000;
 const platform = process.env.VERCEL ? 'vercel'
   : (process.env.RENDER || process.env.RENDER_EXTERNAL_URL) ? 'render'
   : process.env.AWS_LAMBDA_FUNCTION_NAME ? 'lambda'
   : 'node';
 let warmUntil = bootAt + WARMUP_MS; /* sampai kapan sampel lag diabaikan */
 let lastReqAt = 0; /* request terakhir — deteksi bangun dari suspend */
+let suppressUntil = 0; /* pemutus alihan aktif sampai tsb (mode auto) */
+let graceUntil = 0; /* ambang lag diperketat sampai tsb (pasca-rilis) */
 
 /* Konfigurasi efektif (di-cache, disegarkan tiap 15 dtk dari DB) */
 const cfg = { mode: 'auto', manualOn: 0, maxConc: 8, maxLagMs: 250, holdSecs: 10, releaseSecs: 20 };
@@ -188,21 +203,35 @@ function isBusyNow(e){
    berhenti menghitung dan antrian terasa tidak pernah selesai). */
 function tickState(now){
   const e = eff();
-  if(e.mode === 'off'){ openState = false; openSince = 0; overSince = 0; underSince = 0; return; }
+  if(e.mode === 'off'){ openState = false; openSince = 0; overSince = 0; underSince = 0; suppressUntil = 0; graceUntil = 0; return; }
   if(e.mode === 'manual'){
     openState = !!e.manualOn;
     if(e.manualOn){ if(!openSince) openSince = now; } else openSince = 0;
-    overSince = 0; underSince = 0;
+    overSince = 0; underSince = 0; suppressUntil = 0; graceUntil = 0;
     return;
   }
-  if(overThreshold(e)){
+  const over = inflight >= e.maxConc;
+  const lagHi = lagEma >= e.maxLagMs;
+  /* Rilis hanya dianggap “benar-benar normal” bila lag turun jelas di bawah
+     ambang (0,6×) — EMA yang bergetar di sekitar ambang tidak lagi mengulur
+     ulang hitungan release, sehingga antrian pasti menutup. */
+  const lagLo = lagEma === 0 || lagEma < e.maxLagMs * 0.6;
+  if(over || lagHi){
     underSince = 0;
     if(!overSince) overSince = now;
-    if(now - overSince >= e.holdSecs * 1000){ if(!openSince) openSince = now; }
-  } else {
+    if(now - overSince >= e.holdSecs * 1000){
+      const graceActive = GRACE_MS > 0 && now < graceUntil;
+      const sustainedOver = lagHi && (now - overSince) >= Math.max(e.holdSecs, 60) * 1000;
+      if(!graceActive || (lagEma >= e.maxLagMs * 1.5 && sustainedOver)){
+        if(!openSince) openSince = now;
+      }
+    }
+  } else if(inflight < e.maxConc && lagLo){
     overSince = 0;
     if(!underSince) underSince = now;
-    else if(now - underSince >= e.releaseSecs * 1000) openSince = 0;
+    else if(now - underSince >= e.releaseSecs * 1000){
+      if(openSince){ openSince = 0; graceUntil = now + GRACE_MS; }
+    }
   }
   openState = !!openSince;
 }
@@ -212,6 +241,7 @@ async function queueOpen(){ return openState; }
 
 function snapshot(){
   const e = eff();
+  const now = Date.now();
   const busy = isBusyNow(e);
   return {
     mode: e.mode,
@@ -222,11 +252,17 @@ function snapshot(){
     maxConc: e.maxConc, maxLagMs: e.maxLagMs,
     holdSecs: e.holdSecs, releaseSecs: e.releaseSecs,
     queueOpenSince: openSince || null,
+    /* Transparansi pemutus alihan & grace pasca-rilis (format 2) */
+    format: 2,
+    gateSuppressed: now < suppressUntil,
+    suppressSecs: now < suppressUntil ? Math.ceil((suppressUntil - now) / 1000) : 0,
+    lagReleaseMs: Math.round(e.maxLagMs * 0.6),
+    graceActive: now < graceUntil,
     /* Transparansi platform: pengguna bisa melihat sendiri apakah
        sistem benar-benar sibuk atau baru sekadar bangun dari tidur. */
     platform,
-    uptimeSecs: Math.round((Date.now() - bootAt) / 1000),
-    warming: Date.now() < warmUntil,
+    uptimeSecs: Math.round((now - bootAt) / 1000),
+    warming: now < warmUntil,
     lagSignal: platform === 'node' ? 'aktif' : 'dibatasi (serverless)'
   };
 }
@@ -237,6 +273,7 @@ function setManual(on, mode){
   cfgAt = Date.now();
   if(on){ openSince = openSince || Date.now(); openState = true; }
   else { openSince = 0; overSince = 0; underSince = 0; openState = false; }
+  suppressUntil = 0; graceUntil = 0;
 }
 
 /* ---------- Admin bypass: decode payload JWT (tanpa verifikasi tanda tangan —
@@ -291,11 +328,20 @@ function gate(req, res, next){
     if(url === '/busy.html' || SKIP_FILES.has(url) || SKIP_PREFIX.some(p => url.startsWith(p))) return next();
 
     await cfgAsync();
-    if(!(await queueOpen())) return next();
+    const e = eff();
+    if(!(await queueOpen())){ suppressUntil = 0; return next(); }
+
+    /* Pemutus alihan (mode auto): setelah satu alihan terkirim, alihan
+       berikutnya ditahan SUPPRESS_MS supaya pengguna tidak terjebak loop
+       ketika antrian ternyata terbuka tanpa beban nyata. Mode manual tetap
+       konsisten (tidak pernah ditahan) karena dikendalikan superadmin. */
+    const suppressed = e.mode === 'auto' && Date.now() < suppressUntil;
+    if(suppressed) return next();
 
     /* API non-publik → 503 JSON (kecuali admin/superadmin) */
     if(url.startsWith('/api/')){
       if(isAdminReq(req)) return next();
+      if(e.mode === 'auto') suppressUntil = Date.now() + SUPPRESS_MS;
       const nonce = crypto.randomBytes(10).toString('hex');
       res.set('Retry-After', '5');
       return res.status(503).json({ busy: true, retry: '/busy.html?n=' + nonce });
@@ -308,6 +354,7 @@ function gate(req, res, next){
     /* Halaman browser (dokumen HTML / clean-URL) → redirect ke antrian */
     const isPage = ACCEPT_HTML.test(String(req.headers.accept || '')) || !EXT_RE.test(url);
     if(!isPage) return next();
+    if(e.mode === 'auto') suppressUntil = Date.now() + SUPPRESS_MS;
     const nonce = crypto.randomBytes(12).toString('hex');
     res.set('Retry-After', '5');
     res.set('Cache-Control', 'no-store');

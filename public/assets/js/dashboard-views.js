@@ -1668,6 +1668,139 @@
     /* ================= FORM PENDAFTARAN (field dinamis) =================
        Kelola definisi field formulir pendaftaran publik: label, wajib,
        aktif, urutan, opsi select, dan field tambahan (reg_extra_*). */
+    /* ================= BEBAN SISTEM & HALAMAN ANTRIAN =================
+       Kontrol terpusat deteksi sibuk: saklar aktif/nonaktif, mode manual,
+       ambang, dan status langsung — dipindah dari dalam Pengaturan agar
+       mudah dijangkau saat sistem sedang bermasalah. */
+    beban: async function(host, role){
+      if(VIEWS._bebanTimer){ clearInterval(VIEWS._bebanTimer); VIEWS._bebanTimer = null; }
+      var canEdit = role === 'superadmin';
+      var first = null;
+      try { first = await SIKAPI.get('/busy'); } catch(e){}
+      var b = (first && first.data) || { mode:'auto', manualOn:false, busy:false, state:'normal', inflight:0, peak:0, lagMs:0, maxConc:8, maxLagMs:250, holdSecs:10, releaseSecs:20, platform:'node', uptimeSecs:0, warming:false };
+
+      var stateTxt = { normal:'Normal — antrian tertutup', busy:'Sibuk — antrian TERBUKA', recovering:'Pemulihan — antrian akan menutup', off:'Mati — semua pengunjung dilayani langsung' };
+      var stateCls = { normal:'badge-success', busy:'badge-danger', recovering:'badge-warn', off:'badge-neutral' };
+      var isOn = b.mode !== 'off';
+
+      host.innerHTML =
+        '<div class="sticky-save between wrap-flex gap-12">'
+        + '<div><h3 class="display-s">Beban Sistem &amp; Antrian</h3>'
+        + '<p class="small muted mt-8">Deteksi sibuk otomatis + halaman antrian (busy.html). Aktifkan bila server sering kewalahan; matikan bila halaman antrian justru mengganggu — semua pengunjung langsung dilayani tanpa antrian.</p></div>'
+        + '<div class="row gap-8 wrap-flex">'
+        + (canEdit
+          ? '<button class="btn ' + (isOn ? 'btn-ghost' : 'btn-primary') + '" id="bbToggle">' + (isOn ? 'Matikan deteksi sibuk' : 'Aktifkan deteksi sibuk') + '</button>'
+          : '<span class="badge badge-warn">Hanya superadmin dapat mengubah</span>')
+        + '</div></div>'
+
+        /* ---------- Status langsung ---------- */
+        + '<div class="card card-pad mt-16">'
+        + '<div class="between wrap-flex gap-8"><h4 style="margin:0;">Status langsung</h4><span class="badge ' + (stateCls[b.state] || 'badge-neutral') + '" id="bbState">' + esc(stateTxt[b.state] || b.state) + '</span></div>'
+        + '<div class="grid-2 mt-16" id="bbMetrics">'
+        + statCard('Permintaan aktif', String(b.inflight || 0), IC.activity || IC.grid)
+        + statCard('Puncak (10 dtk)', String(b.peak || 0), IC.chart)
+        + statCard('Jeda event-loop', (b.lagMs || 0) + ' ms', IC.pulse)
+        + statCard('Platform', (b.platform === 'node' ? 'Node persisten' : 'Serverless (' + esc(b.platform) + ')') + (b.warming ? ' · fase bangun' : ''), IC.globe)
+        + '</div>'
+        + '<p class="tiny faint mt-12" id="bbDetail">Mode ' + esc(b.mode) + ' · ambang ' + (b.maxConc || 8) + ' permintaan / ' + (b.maxLagMs || 250) + ' ms · rilis di bawah ' + Math.round((b.maxLagMs || 250) * 0.6) + ' ms'
+        + (b.gateSuppressed ? ' · <b style="color:var(--warn);">pemutus alihan aktif (' + (b.suppressSecs || 0) + ' dtk) — pengunjung sementara masuk langsung</b>' : '')
+        + (b.graceActive ? ' · ambang lag diperketat sementara (pasca-rilis)' : '')
+        + '.</p>'
+        + '</div>'
+
+        /* ---------- Pengaturan ---------- */
+        + '<div class="card card-pad mt-16">'
+        + '<h4 style="margin:0;">Pengaturan deteksi</h4>'
+        + '<div class="grid-2 mt-16">'
+        + '<div class="field"><label>Mode deteksi</label>'
+        + '<div class="input-shell"><select id="bbMode" ' + (canEdit ? '' : 'disabled') + '>'
+        + '<option value="off"' + (b.mode === 'off' ? ' selected' : '') + '>Mati — antrian tidak pernah terbuka</option>'
+        + '<option value="auto"' + (b.mode === 'auto' ? ' selected' : '') + '>Auto — deteksi otomatis (disarankan)</option>'
+        + '<option value="manual"' + (b.mode === 'manual' ? ' selected' : '') + '>Manual — dikendalikan di bawah</option>'
+        + '</select></div></div>'
+        + '<div class="field" id="bbManualWrap" style="display:' + (b.mode === 'manual' ? 'block' : 'none') + ';"><label>Status antrian (manual)</label>'
+        + '<div class="input-shell"><select id="bbManual" ' + (canEdit ? '' : 'disabled') + '>'
+        + '<option value="0"' + (!b.manualOn ? ' selected' : '') + '>Tutup — sistem normal</option>'
+        + '<option value="1"' + (b.manualOn ? ' selected' : '') + '>Buka — paksa pengunjung mengantri</option>'
+        + '</select></div></div>'
+        + '</div>'
+        + '<div class="grid-2 mt-12">'
+        + '<div class="field"><label>Ambang permintaan aktif</label><div class="input-shell"><input id="bbConc" type="number" min="1" value="' + (b.maxConc || 8) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian terbuka bila permintaan bersamaan melebihi angka ini.</span></div>'
+        + '<div class="field"><label>Ambang jeda server (ms)</label><div class="input-shell"><input id="bbLag" type="number" min="20" value="' + (b.maxLagMs || 250) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Keterlambatan event-loop yang dianggap kewalahan.</span></div>'
+        + '</div>'
+        + '<div class="grid-2 mt-12">'
+        + '<div class="field"><label>Tahan sebelum antrian (detik)</label><div class="input-shell"><input id="bbHold" type="number" min="1" value="' + (b.holdSecs || 10) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Lonjakan sesaat tidak langsung membuka antrian.</span></div>'
+        + '<div class="field"><label>Lepas setelah normal (detik)</label><div class="input-shell"><input id="bbRelease" type="number" min="5" value="' + (b.releaseSecs || 20) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian ditutup setelah beban stabil normal selama durasi ini.</span></div>'
+        + '</div>'
+        + (canEdit ? '<div class="row gap-12 mt-16"><button class="btn btn-primary btn-sm" id="bbSave">Simpan Pengaturan</button><button class="btn btn-soft btn-sm" id="bbTest">Lihat halaman antrian</button></div>' : '')
+        + (!first ? '<p class="hint mt-8">Backend belum mendukung modul beban sistem — perbarui server ke versi terbaru.</p>' : '')
+        + '</div>'
+        + '<p class="tiny faint mt-8">Catatan: admin &amp; superadmin tidak pernah di-antrikan (tetap bisa masuk mengendalikan sistem). Status juga tersedia publik via /api/public/busy-status.</p>';
+
+      function el(id){ return document.getElementById(id); }
+
+      /* Saklar utama: langsung PUT tanpa lewat form — keputusan darurat satu klik */
+      var tgl = el('bbToggle');
+      if(tgl) tgl.onclick = async function(){
+        tgl.disabled = true;
+        try {
+          await SIKAPI.put('/busy', { mode: isOn ? 'off' : 'auto' });
+          showToast(isOn ? 'Deteksi sibuk dimatikan — halaman antrian tidak akan muncul.' : 'Deteksi sibuk diaktifkan (mode auto).', 'success');
+          return VIEWS.beban(host, role);
+        } catch(e){ showToast(e.message, 'danger'); tgl.disabled = false; }
+      };
+
+      var modeSel = el('bbMode');
+      if(modeSel){
+        modeSel.onchange = function(){ var w = el('bbManualWrap'); if(w) w.style.display = modeSel.value === 'manual' ? 'block' : 'none'; };
+      }
+
+      var saveBtn = el('bbSave');
+      if(saveBtn) saveBtn.onclick = async function(){
+        try {
+          var body = { mode: el('bbMode').value };
+          if(body.mode === 'manual') body.manualOn = el('bbManual').value === '1';
+          body.maxConc = parseInt(el('bbConc').value, 10);
+          body.maxLagMs = parseInt(el('bbLag').value, 10);
+          body.holdSecs = parseInt(el('bbHold').value, 10);
+          body.releaseSecs = parseInt(el('bbRelease').value, 10);
+          await SIKAPI.put('/busy', body);
+          showToast('Pengaturan beban sistem disimpan.', 'success');
+        } catch(e){ showToast(e.message, 'danger'); }
+      };
+
+      var testBtn = el('bbTest');
+      if(testBtn) testBtn.onclick = function(){ window.open('/busy.html?n=preview&ret=/dashboard', '_blank'); };
+
+      /* Status langsung menyegarkan diri tiap 5 dtk selama view terbuka */
+      async function refreshStatus(){
+        var stEl = el('bbState');
+        if(!stEl){ if(VIEWS._bebanTimer){ clearInterval(VIEWS._bebanTimer); VIEWS._bebanTimer = null; } return; }
+        try {
+          var r = await SIKAPI.get('/busy');
+          var d = (r && r.data) || {};
+          stEl.textContent = stateTxt[d.state] || d.state || '—';
+          stEl.className = 'badge ' + (stateCls[d.state] || 'badge-neutral');
+          var det = el('bbDetail');
+          if(det){
+            det.innerHTML = 'Mode ' + esc(d.mode || '-') + ' · ambang ' + (d.maxConc || 8) + ' permintaan / ' + (d.maxLagMs || 250) + ' ms · rilis di bawah ' + Math.round((d.maxLagMs || 250) * 0.6) + ' ms'
+              + (d.gateSuppressed ? ' · <b style="color:var(--warn);">pemutus alihan aktif (' + (d.suppressSecs || 0) + ' dtk) — pengunjung sementara masuk langsung</b>' : '')
+              + (d.graceActive ? ' · ambang lag diperketat sementara (pasca-rilis)' : '')
+              + '.';
+          }
+          var m = el('bbMetrics');
+          if(m){
+            m.innerHTML = statCard('Permintaan aktif', String(d.inflight || 0), IC.activity || IC.grid)
+              + statCard('Puncak (10 dtk)', String(d.peak || 0), IC.chart)
+              + statCard('Jeda event-loop', (d.lagMs || 0) + ' ms', IC.pulse)
+              + statCard('Platform', (d.platform === 'node' ? 'Node persisten' : 'Serverless (' + esc(d.platform || '-') + ')') + (d.warming ? ' · fase bangun' : ''), IC.globe);
+          }
+        } catch(e){ /* diam — coba lagi pada tick berikutnya */ }
+      }
+      VIEWS._bebanTimer = setInterval(refreshStatus, 5000);
+    },
+
+    /* ================= FORM PENDAFTARAN (field dinamis) ================= */
     formFields: async function(host, role){
       var canEdit = role === 'superadmin';
       var res = await SIKAPI.get('/reg-fields');
@@ -2862,42 +2995,12 @@
         + (s.hero_bg && canEdit ? '<button class="btn btn-soft btn-sm" id="heroDel" style="color:var(--danger);">Hapus (pakai fallback)</button>' : '')
         + '</div></div></div>';
 
-      /* ---------- Kartu beban sistem & antrian ---------- */
-      var bzRes = null;
-      try { bzRes = await SIKAPI.get('/busy'); } catch(_){}
-      var bz = (bzRes && bzRes.data) || { mode: 'auto', manualOn: false, busy: false, state: 'normal', inflight: 0, peak: 0, lagMs: 0, maxConc: 8, maxLagMs: 250, holdSecs: 10, releaseSecs: 20, platform: 'node', uptimeSecs: 0, warming: false };
-      var bzStateTxt = { normal: 'Normal', busy: 'Sibuk — antrian terbuka', recovering: 'Pemulihan — antrian menutup perlahan', off: 'Fitur mati' };
+      /* ---------- Kartu penunjuk ke menu Beban Sistem ---------- */
       var bzCard =
         '<div class="card card-pad" style="margin-bottom:16px;">'
-        + '<h3 class="display-s">Beban sistem &amp; antrian otomatis</h3>'
-        + (bz.platform && bz.platform !== 'node'
-          ? '<p class="hint mt-8" style="color:var(--warn);">Platform terdeteksi: <b>serverless (' + esc(bz.platform) + ')</b> — instans bisa tertidur di antara permintaan, sehingga sinyal "jeda server" dibatasi ketat (warmup &amp; clamp) agar tidak salah membuka antrian. Sinyal utama di platform ini: jumlah permintaan aktif.</p>'
-          : '<p class="hint mt-8">Platform: server Node persisten — kedua sinyal beban aktif penuh.</p>')
-        + '<p class="small muted mt-8">Saat banyak pengguna mengakses bersamaan dan server melewati ambang, pengunjung halaman otomatis diarahkan ke halaman antrian dan dikembalikan begitu sistem normal. Mode <b>auto</b> mendeteksi sendiri (jumlah permintaan aktif + jeda event-loop); mode <b>manual</b> untuk uji coba atau pemeliharaan terjadwal; mode <b>off</b> mematikan fitur sepenuhnya.</p>'
-        + '<div class="grid-2 mt-16">'
-        + '<div class="field"><label>Mode deteksi</label>'
-        + '<div class="input-shell"><select id="bzMode" ' + (canEdit ? '' : 'disabled') + '>'
-        + '<option value="auto"' + (bz.mode === 'auto' ? ' selected' : '') + '>Auto — deteksi otomatis (disarankan)</option>'
-        + '<option value="manual"' + (bz.mode === 'manual' ? ' selected' : '') + '>Manual — dikendalikan superadmin</option>'
-        + '<option value="off"' + (bz.mode === 'off' ? ' selected' : '') + '>Off — fitur mati</option>'
-        + '</select></div></div>'
-        + '<div class="field" id="bzManualWrap" style="display:' + (bz.mode === 'manual' ? 'block' : 'none') + ';"><label>Status antrian (manual)</label>'
-        + '<div class="input-shell"><select id="bzManual" ' + (canEdit ? '' : 'disabled') + '>'
-        + '<option value="0"' + (!bz.manualOn ? ' selected' : '') + '>Tutup — sistem normal</option>'
-        + '<option value="1"' + (bz.manualOn ? ' selected' : '') + '>Buka — paksa semua pengunjung mengantri</option>'
-        + '</select></div></div>'
-        + '</div>'
-        + '<div class="grid-2 mt-12">'
-        + '<div class="field"><label>Ambang permintaan aktif</label><div class="input-shell"><input id="bzConc" type="number" min="1" value="' + (bz.maxConc || 8) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian terbuka bila permintaan bersamaan melewati angka ini.</span></div>'
-        + '<div class="field"><label>Ambang jeda server (ms)</label><div class="input-shell"><input id="bzLag" type="number" min="20" value="' + (bz.maxLagMs || 250) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Keterlambatan event-loop yang menandakan server kewalahan.</span></div>'
-        + '</div>'
-        + '<div class="grid-2 mt-12">'
-        + '<div class="field"><label>Tahan sebelum antrian (detik)</label><div class="input-shell"><input id="bzHold" type="number" min="1" value="' + (bz.holdSecs || 10) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Mencegah antrian terbuka karena lonjakan sesaat.</span></div>'
-        + '<div class="field"><label>Lepas setelah normal (detik)</label><div class="input-shell"><input id="bzRelease" type="number" min="5" value="' + (bz.releaseSecs || 20) + '" ' + (canEdit ? '' : 'disabled') + '></div><span class="hint">Antrian ditutup setelah beban stabil normal selama durasi ini.</span></div>'
-        + '</div>'
-        + '<p class="hint mt-8">Status saat ini: <b>' + esc(bzStateTxt[bz.state] || bz.state) + '</b> — aktif ' + (bz.inflight || 0) + ' permintaan (puncak ' + (bz.peak || 0) + '), jeda ' + (bz.lagMs || 0) + ' ms' + (bz.uptimeSecs !== undefined ? ' · umur sesi ' + bz.uptimeSecs + ' dtk' : '') + (bz.warming ? ' · <b style="color:var(--warn);">fase bangun — jeda sementara diabaikan</b>' : '') + '.</p>'
-        + (canEdit ? '<div class="row gap-12 mt-12"><button class="btn btn-primary btn-sm" id="bzSave">Simpan Beban Sistem</button><button class="btn btn-soft btn-sm" id="bzTest">Lihat halaman antrian</button></div>' : '')
-        + (!bzRes ? '<p class="hint mt-8">Backend belum mendukung modul beban sistem — perbarui server ke versi terbaru.</p>' : '')
+        + '<h3 class="display-s">Beban sistem &amp; antrian</h3>'
+        + '<p class="small muted mt-8">Kontrol deteksi sibuk &amp; halaman antrian kini punya menu sendiri — lengkap dengan status langsung, saklar aktif/mati, mode manual, dan seluruh ambang.</p>'
+        + '<a class="btn btn-soft btn-sm" style="margin-top:8px;" href="#" onclick="return UI.go(\'beban\');">Buka menu Beban Sistem →</a>'
         + '</div>';
 
       /* ---------- Kartu penyimpanan uploads (multi-driver + kredensial) ---------- */
@@ -3424,31 +3527,6 @@
         };
       }
 
-      /* ---------- Beban sistem: simpan pengaturan & pratinjau antrian ---------- */
-      var bzModeSel = document.getElementById('bzMode');
-      if(bzModeSel){
-        var bzManualWrap = document.getElementById('bzManualWrap');
-        bzModeSel.onchange = function(){ if(bzManualWrap) bzManualWrap.style.display = bzModeSel.value === 'manual' ? 'block' : 'none'; };
-      }
-      var bzSaveBtn = document.getElementById('bzSave');
-      if(bzSaveBtn){
-        bzSaveBtn.onclick = async function(){
-          try {
-            var body = { mode: document.getElementById('bzMode').value };
-            if(body.mode === 'manual') body.manualOn = document.getElementById('bzManual').value === '1';
-            body.maxConc = parseInt(document.getElementById('bzConc').value, 10);
-            body.maxLagMs = parseInt(document.getElementById('bzLag').value, 10);
-            body.holdSecs = parseInt(document.getElementById('bzHold').value, 10);
-            body.releaseSecs = parseInt(document.getElementById('bzRelease').value, 10);
-            await SIKAPI.put('/busy', body);
-            showToast('Pengaturan beban sistem disimpan.', 'success');
-          } catch(e){ showToast(e.message, 'danger'); }
-        };
-      }
-      var bzTestBtn = document.getElementById('bzTest');
-      if(bzTestBtn){
-        bzTestBtn.onclick = function(){ window.open('/busy.html?n=preview&ret=/dashboard', '_blank'); };
-      }
 
       /* Favicon upload */
       var favFi = document.getElementById('favFile');

@@ -5,6 +5,7 @@
   'use strict';
 
   var IC = {
+    pulse:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2.5-7 4 14 2.5-7H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     chat:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.7-.8L3 20l1.2-5.2a8 8 0 0 1-.7-3.3A8.4 8.4 0 0 1 12 3.2a8.4 8.4 0 0 1 9 8.3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
     send:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
     file:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
@@ -106,6 +107,7 @@
       ]},
       { group:'Pengaturan', items:[
         { id:'pengaturan', label:'Pengaturan', icon:'settings' },
+        { id:'beban', label:'Beban Sistem', icon:'pulse' },
         { id:'tema', label:'Warna Tema', icon:'check' }
       ]},
       { group:null, items:[
@@ -209,6 +211,7 @@
     impor:     'Masuk/keluar data via Excel',
     struktur:  'Hierarki DPD → DPC → Ranting',
     tema:      'Warna utama & aksen website',
+    beban:     'Kendalikan deteksi beban & halaman antrian',
     log:       'Jejak audit seluruh aksi pengelola',
     pengaturan:'Konfigurasi sistem & akun pengelola',
     profil:    'Data diri & status keanggotaan Anda'
